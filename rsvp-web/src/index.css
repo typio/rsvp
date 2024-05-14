@@ -37,7 +37,7 @@
 
     --input: 209 100% 20%;
 
-    --ring: 35.5 91.7% 32.9%;
+    --ring: 49 91.6% 62.5%;
     --radius: 0.75rem;
   }
 }
@@ -49,4 +49,3 @@
     @apply bg-background text-foreground;
   }
 }
-
