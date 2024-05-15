@@ -5,10 +5,10 @@ const Header = () => (
   <header>
     <a
       href="/"
-      className="flex flex-row gap-4 items-center text-primary font-bold "
+      className="flex flex-row gap-4 items-center text-primary font-bold hover:text-primary/90 "
     >
       <FontAwesomeIcon icon={faCalendarCheck} size="xl" />
-      <h1 className="text-xl">RSVP</h1>
+      <h1 className="text-xl">BITCH, RSVP!</h1>
     </a>
   </header>
 )

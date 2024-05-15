@@ -1,21 +1,37 @@
 import { useState } from 'react'
 
+import { DateRange } from 'react-day-picker'
+import { addDays, format, startOfWeek } from 'date-fns'
+
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faShare } from '@fortawesome/free-solid-svg-icons'
+
 import { Button } from '@/components/ui/button'
-import { DatePickerWithRange } from './components/datepicker'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+// import { useToast } from '@/components/ui/use-toast'
+// import { ToastAction } from '@/components/ui/toast'
+
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import { DatePickerWithRange } from '@/components/datepicker'
+
 import Header from './Header'
 import Footer from './Footer'
+import Schedule from './components/schedule'
 
 function App() {
-  const [count, setCount] = useState(0)
-  const [daysEnabled, setDaysEnabled] = useState({
-    sunday: false,
-    monday: true,
-    tuesday: true,
-    wednesday: true,
-    thursday: true,
-    friday: true,
-    saturday: false
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: new Date(),
+    to: addDays(new Date(), 6)
   })
+
+  const days = Array.from(Array(7)).map((_, i) =>
+    format(addDays(startOfWeek(0), i), 'EEEEEEE')
+  )
+
+  const [daysEnabled, setDaysEnabled] = useState(days.slice(1, 5))
+
+  // const { toast } = useToast()
 
   return (
     <>
@@ -24,33 +40,57 @@ function App() {
         <main className="grid grid-cols-2 gap-x-8">
           <div className="flex flex-col">
             <div className="flex flex-row">
-              <DatePickerWithRange />
+              <DatePickerWithRange date={date} setDate={setDate} />
             </div>
             <div className="flex flex-row gap-x-2 my-2">
-              {Object.entries(daysEnabled).map(([day, dayEnabled], i) => {
-                return (
-                  <Button
-                    key={i}
-                    className={`${dayEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/80' : 'border-2 border-primary bg-background text-foreground hover:bg-background/70'} rounded-sm w-11 h-11`}
-                    onClick={() => {
-                      setDaysEnabled({ ...daysEnabled, [day]: !dayEnabled })
-                    }}
-                  >
-                    {day
-                      .slice(0, 3)
-                      .split('')
-                      .map((l: string, i: number) =>
-                        i === 0 ? l.toUpperCase() : l
-                      )}
-                  </Button>
-                )
-              })}
+              <ToggleGroup
+                type="multiple"
+                value={daysEnabled}
+                onValueChange={setDaysEnabled}
+              >
+                {days.map((day, i) => {
+                  return (
+                    <ToggleGroupItem
+                      key={i}
+                      className={`w-12 h-12`}
+                      value={day}
+                    >
+                      {day
+                        .slice(0, 3)
+                        .split('')
+                        .map((l: string, i: number) =>
+                          i === 0 ? l.toUpperCase() : l
+                        )}
+                    </ToggleGroupItem>
+                  )
+                })}
+              </ToggleGroup>
             </div>
+            <Schedule daysEnabled={daysEnabled} dateRange={date} />
           </div>
-          <div className="flex flex-row">
-            <Button onClick={() => setCount(count => count + 1)}>
-              count is {count}
-            </Button>
+          <div className="flex flex-col">
+            <div className="flex flex-row gap-x-4 ">
+              <Input placeholder="Event " />
+              <Button>
+                <FontAwesomeIcon icon={faShare} />
+              </Button>
+              <Button
+                onClick={() => {
+                  toast.error(
+                    'You must become a Pro member to select 2+ weeks!',
+                    {
+                      description: 'Pro subscriptions are not available.',
+                      action: {
+                        label: 'Ok, sorry.',
+                        onClick: () => {}
+                      }
+                    }
+                  )
+                }}
+              >
+                Show Toast
+              </Button>
+            </div>
           </div>
         </main>
         <Footer />

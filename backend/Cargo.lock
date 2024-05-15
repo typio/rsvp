@@ -1016,15 +1016,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae743338b92ff9146ce83992f766a31066a91a8c84a45e0e9f21e7cf6de6d346"
 
 [[package]]
-name = "link-planit"
-version = "0.1.0"
-dependencies = [
- "async-std",
- "serde",
- "tide",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1282,6 +1273,15 @@ name = "route-recognizer"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56770675ebc04927ded3e60633437841581c285dc6236109ea25fbf3beb7b59e"
+
+[[package]]
+name = "rsvp"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "serde",
+ "tide",
+]
 
 [[package]]
 name = "rustc_version"
