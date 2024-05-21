@@ -1,6 +1,6 @@
 'use client'
 
-import { format } from 'date-fns'
+import { differenceInDays, format, getDayOfYear } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -12,16 +12,36 @@ import {
   PopoverTrigger
 } from '@/components/ui/popover'
 import { DateRange } from 'react-day-picker'
+import { toast } from 'sonner'
 
-export const DatePickerWithRange = ({
-  date,
-  setDate,
+export const DatePickerMultiple = ({
+  dates,
+  setDates,
   className
 }: {
-  date: DateRange | undefined
-  setDate: React.Dispatch<React.SetStateAction<DateRange | undefined>>
+  dates: Date[] | undefined
+  setDate: React.Dispatch<React.SetStateAction<Date[] | undefined>>
   className?: string
 }) => {
+  const trySetDates = (newDates: Date[] | undefined, nD) => {
+    if (!(dates ?? []).some(e => e.getTime() === nD.getTime())) {
+      if ((dates ?? []).length >= 14)
+        toast.error('You must become a Pro member to select 2+ weeks!', {
+          description: 'Pro subscriptions are not available.',
+          action: {
+            label: 'Ok, sorry.',
+            onClick: () => {}
+          }
+        })
+      else
+        setDates(
+          [...(dates ?? []), nD].sort((a, b) => a.getTime() - b.getTime())
+        )
+    } else {
+      setDates(dates.filter(e => e.getTime() !== nD.getTime()))
+    }
+  }
+
   return (
     <div className={cn('grid gap-2', className)}>
       <Popover>
@@ -31,32 +51,19 @@ export const DatePickerWithRange = ({
             variant={'outline'}
             className={cn(
               'w-[300px] justify-start text-left font-normal',
-              !date && 'text-muted-foreground'
+              (dates ?? []).length === 0 && 'text-muted-foreground'
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {date?.from ? (
-              date.to ? (
-                <>
-                  {format(date.from, 'LLL dd, y')} -{' '}
-                  {format(date.to, 'LLL dd, y')}
-                </>
-              ) : (
-                format(date.from, 'LLL dd, y')
-              )
-            ) : (
-              <span>Pick a date</span>
-            )}
+            Select Days
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
             initialFocus
-            mode="range"
-            defaultMonth={date?.from}
-            selected={date}
-            onSelect={setDate}
-            numberOfMonths={2}
+            mode="multiple"
+            selected={dates}
+            onSelect={trySetDates}
           />
         </PopoverContent>
       </Popover>
