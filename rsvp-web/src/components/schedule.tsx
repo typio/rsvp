@@ -1,4 +1,7 @@
+import { faEraser } from '@fortawesome/free-solid-svg-icons'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
+import { Button } from './ui/button'
 
 const HEADER_HEIGHT = 44
 const CELL_HEIGHT = 16
@@ -6,10 +9,15 @@ const CELL_HEIGHT = 16
 const Schedule = ({
   dates,
   timeRange,
-  slotLength
+  slotLength,
+  schedule,
+  setSchedule
 }: {
   dates: Date[]
   timeRange: any
+  slotLength: number
+  schedule: boolean[][]
+  setSchedule: React.Dispatch<boolean[][]>
 }) => {
   const timeDifference =
     (Number(timeRange.to.hour) +
@@ -17,14 +25,15 @@ const Schedule = ({
       (Number(timeRange.from.hour) + (timeRange.from.isAM ? 0 : 12))) *
     60
 
-  console.log(timeRange, timeDifference)
-
   const timeSlots = timeDifference / slotLength
-  let [schedule, setSchedule] = useState<boolean[][]>([])
 
   useEffect(() => {
     setSchedule(
-      dates.map(_ => Array.from({ length: timeSlots }).map(_ => false))
+      dates.map((_, dayIndex) =>
+        Array.from({ length: timeSlots }).map(
+          (_, timeIndex) => schedule?.[dayIndex]?.[timeIndex] ?? false
+        )
+      )
     )
   }, [dates, timeRange, slotLength])
 
@@ -69,7 +78,7 @@ const Schedule = ({
   const applySelection = (selection: Selection) => {
     if (selection.range == null) return
 
-    let newSchedule = schedule
+    let newSchedule = [...schedule]
 
     const [lesserDI, greaterDI] = [
       selection.range.from.dateIndex,
@@ -92,47 +101,62 @@ const Schedule = ({
 
   return (
     <div>
-      <div className="flex flex-row p-4 bg-border rounded-lg select-none overflow-scroll">
-        <div
-          className="flex flex-col justify-between "
-          style={{
-            marginTop: HEADER_HEIGHT
-          }}
-        >
-          {Array.from({ length: timeSlots + 1 }).map((_, i) => (
-            <div
-              key={`timeLabel-${i}`}
-              className="text-sm text-right mx-2 text-muted-foreground"
-              style={{
-                height: 0,
-                lineHeight: 0,
-                backgroundColor: 'red',
-                overflow: 'visible'
-              }}
-            >
-              {`${Math.floor((i * slotLength) / 60)
-                .toString()
-                .padStart(2, '0')}:${((i * slotLength) % 60)
-                .toString()
-                .padStart(2, '0')}`}
-            </div>
+      <div className="flex flex-col p-6 bg-border rounded-lg select-none">
+        <div className="flex flex-row overflow-x-scroll pb-4">
+          <div
+            className="flex flex-col justify-between"
+            style={{
+              marginTop: HEADER_HEIGHT
+            }}
+          >
+            {Array.from({ length: timeSlots + 1 }).map((_, i) => (
+              <div
+                key={`timeLabel-${i}`}
+                className="text-sm text-right mx-2 text-muted-foreground"
+                style={{
+                  height: 0,
+                  lineHeight: 0,
+                  backgroundColor: 'red',
+                  overflow: 'visible'
+                }}
+              >
+                {`${(
+                  Math.floor((i * slotLength) / 60) +
+                  Number(timeRange.from.hour)
+                )
+                  .toString()
+                  .padStart(
+                    2,
+                    '0'
+                  )}:${((i * slotLength) % 60).toString().padStart(2, '0')}`}
+              </div>
+            ))}
+          </div>
+
+          {dates.map((date, dateIndex) => (
+            <DayColumn
+              key={`day-column-${dateIndex}`}
+              date={date}
+              dateIndex={dateIndex}
+              day={schedule[dateIndex]}
+              HEADER_HEIGHT={HEADER_HEIGHT}
+              CELL_HEIGHT={CELL_HEIGHT}
+              currentSelection={currentSelection}
+              setCurrentSelection={setCurrentSelection}
+              isMouseDown={isMouseDown}
+              setIsMouseDown={setIsMouseDown}
+            />
           ))}
         </div>
-
-        {dates.map((date, dateIndex) => (
-          <DayColumn
-            key={`day-column-${dateIndex}`}
-            date={date}
-            dateIndex={dateIndex}
-            day={schedule[dateIndex]}
-            HEADER_HEIGHT={HEADER_HEIGHT}
-            CELL_HEIGHT={CELL_HEIGHT}
-            currentSelection={currentSelection}
-            setCurrentSelection={setCurrentSelection}
-            isMouseDown={isMouseDown}
-            setIsMouseDown={setIsMouseDown}
-          />
-        ))}
+        <div className="flex flex-row justify-end pt-2">
+          <Button
+            onClick={() =>
+              setSchedule([...schedule].map(day => day.map(time => false)))
+            }
+          >
+            <FontAwesomeIcon icon={faEraser} />
+          </Button>
+        </div>
       </div>
     </div>
   )

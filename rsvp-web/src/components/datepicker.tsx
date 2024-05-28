@@ -20,7 +20,7 @@ export const DatePickerMultiple = ({
   className
 }: {
   dates: Date[] | undefined
-  setDate: React.Dispatch<React.SetStateAction<Date[] | undefined>>
+  setDates: React.Dispatch<React.SetStateAction<Date[]>>
   className?: string
 }) => {
   const trySetDates = (newDates: Date[] | undefined, nD) => {
