@@ -1,11 +1,12 @@
 CREATE TABLE IF NOT EXISTS rooms (
     uid VARCHAR(36) PRIMARY KEY,
-    days JSON,
-    day_count TINYINT,
-    time_min TINYINT,
-    time_max TINYINT,
-    slot_length TINYINT,
-    availabilities JSON
+    dates JSON,
+    day_count TINYINT UNSIGNED,
+    time_min TINYINT UNSIGNED,
+    time_max TINYINT UNSIGNED,
+    slot_length TINYINT UNSIGNED,
+    schedule JSON,
+    expires_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS users (

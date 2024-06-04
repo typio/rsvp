@@ -25,7 +25,7 @@ const CreateOptions = ({
   setTimeRange,
   slotLength,
   setSlotLength
-}) => {
+}: any) => {
   const handeTimeInput = (e: any, isFrom: boolean) => {
     const newValue = Number(e.target.value)
     let newHour = 0
@@ -123,6 +123,18 @@ const CreateOptions = ({
   )
 }
 
+const h12To24 = (hour: number, isAM: boolean) => hour + (isAM ? 0 : 12)
+const h24To12 = (hour: number): { hour: string; isAM: boolean } => {
+  return { hour: '' + (hour > 12 ? hour - 12 : hour), isAM: hour < 12 }
+}
+
+const h24ToTimeRange = (timeRange: { from_hour: number; to_hour: number }) => {
+  return {
+    from: h24To12(timeRange.from_hour),
+    to: h24To12(timeRange.to_hour)
+  }
+}
+
 const Create = () => {
   const isCreate = window.location.pathname === '/'
 
@@ -149,38 +161,56 @@ const Create = () => {
   )
 
   useEffect(() => {
-    localStorage.setItem(
-      'storedCreateState',
-      JSON.stringify({ dates, timeRange, slotLength, schedule })
-    )
+    if (isCreate)
+      localStorage.setItem(
+        'storedCreateState',
+        JSON.stringify({ dates, timeRange, slotLength, schedule })
+      )
   }, [dates, timeRange, slotLength, schedule])
 
   const shareRoom = () => {
     let req = JSON.stringify({
       dates: dates,
       time_range: {
-        from: {
-          hour: Number(timeRange.from.hour) || 0,
-          is_am: timeRange.from.isAM
-        },
-        to: {
-          hour: Number(timeRange.to.hour) || 0,
-          is_am: timeRange.to.isAM
-        }
+        from_hour:
+          h12To24(Number(timeRange.from.hour), timeRange.from.isAM) || 0,
+        to_hour: h12To24(Number(timeRange.to.hour), timeRange.to.isAM) || 0
       },
       slot_length: slotLength,
       schedule: schedule
     })
-    fetch('http://localhost:3632/api/share-room', {
+    fetch('http://localhost:3632/api/rooms', {
       method: 'POST',
-      body: req
+      body: req,
+      credentials: 'include' // Add this line
     }).then(res => {
       res.json().then(resJSON => {
         console.log(resJSON)
-        // window.location.href = `/${resJSON.room_uid}`
+        history.pushState({ page: 1 }, 'room', `/${resJSON.room_uid}`)
       })
     })
   }
+
+  const getRoom = () => {
+    fetch(
+      `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}`,
+      {
+        method: 'GET'
+      }
+    ).then(res => {
+      res.json().then(resJSON => {
+        console.log(resJSON)
+        setTimeRange(h24ToTimeRange(resJSON.time_range))
+        console.log(h24ToTimeRange(resJSON.time_range))
+        setDates(resJSON.dates.map((d: string) => new Date(d)))
+        setSchedule(resJSON.schedule)
+      })
+    })
+  }
+
+  useEffect(() => {
+    getRoom()
+  }, [])
 
   return (
     <main className="gap-x-8">

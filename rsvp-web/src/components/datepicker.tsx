@@ -1,6 +1,5 @@
 'use client'
 
-import { differenceInDays, format, getDayOfYear } from 'date-fns'
 import { Calendar as CalendarIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -11,7 +10,6 @@ import {
   PopoverContent,
   PopoverTrigger
 } from '@/components/ui/popover'
-import { DateRange } from 'react-day-picker'
 import { toast } from 'sonner'
 
 export const DatePickerMultiple = ({
@@ -23,7 +21,8 @@ export const DatePickerMultiple = ({
   setDates: React.Dispatch<React.SetStateAction<Date[]>>
   className?: string
 }) => {
-  const trySetDates = (newDates: Date[] | undefined, nD) => {
+  const trySetDates = (newDates: Date[] | undefined, nD: Date) => {
+    newDates
     if (!(dates ?? []).some(e => e.getTime() === nD.getTime())) {
       if ((dates ?? []).length >= 14)
         toast.error('You must become a Pro member to select 2+ weeks!', {
@@ -38,7 +37,7 @@ export const DatePickerMultiple = ({
           [...(dates ?? []), nD].sort((a, b) => a.getTime() - b.getTime())
         )
     } else {
-      setDates(dates.filter(e => e.getTime() !== nD.getTime()))
+      setDates(dates?.filter(e => e.getTime() !== nD.getTime()) || [])
     }
   }
 

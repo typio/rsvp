@@ -151,7 +151,7 @@ const Schedule = ({
         <div className="flex flex-row justify-end pt-2">
           <Button
             onClick={() =>
-              setSchedule([...schedule].map(day => day.map(time => false)))
+              setSchedule([...schedule].map(day => day.map(_ => false)))
             }
           >
             <FontAwesomeIcon icon={faEraser} />
