@@ -10,8 +10,9 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { DatePickerMultiple } from '@/components/datepicker'
 
-import Schedule from './components/schedule'
-import { ToggleGroup, ToggleGroupItem } from './components/ui/toggle-group'
+import Schedule from '.././components/schedule'
+import { ToggleGroup, ToggleGroupItem } from '.././components/ui/toggle-group'
+import { h12To24 } from '@/utils'
 
 const storedCreateState = ((storedStr: string | null) =>
   typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
@@ -123,21 +124,7 @@ const CreateOptions = ({
   )
 }
 
-const h12To24 = (hour: number, isAM: boolean) => hour + (isAM ? 0 : 12)
-const h24To12 = (hour: number): { hour: string; isAM: boolean } => {
-  return { hour: '' + (hour > 12 ? hour - 12 : hour), isAM: hour < 12 }
-}
-
-const h24ToTimeRange = (timeRange: { from_hour: number; to_hour: number }) => {
-  return {
-    from: h24To12(timeRange.from_hour),
-    to: h24To12(timeRange.to_hour)
-  }
-}
-
 const Create = () => {
-  const isCreate = window.location.pathname === '/'
-
   const [dates, setDates] = useState<Date[]>(
     storedCreateState?.dates.map((d: string) => new Date(d)) ??
       Array.from({ length: 7 }).map((_, i) =>
@@ -161,11 +148,10 @@ const Create = () => {
   )
 
   useEffect(() => {
-    if (isCreate)
-      localStorage.setItem(
-        'storedCreateState',
-        JSON.stringify({ dates, timeRange, slotLength, schedule })
-      )
+    localStorage.setItem(
+      'storedCreateState',
+      JSON.stringify({ dates, timeRange, slotLength, schedule })
+    )
   }, [dates, timeRange, slotLength, schedule])
 
   const shareRoom = () => {
@@ -182,7 +168,7 @@ const Create = () => {
     fetch('http://localhost:3632/api/rooms', {
       method: 'POST',
       body: req,
-      credentials: 'include' // Add this line
+      credentials: 'include'
     }).then(res => {
       res.json().then(resJSON => {
         console.log(resJSON)
@@ -190,27 +176,6 @@ const Create = () => {
       })
     })
   }
-
-  const getRoom = () => {
-    fetch(
-      `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}`,
-      {
-        method: 'GET'
-      }
-    ).then(res => {
-      res.json().then(resJSON => {
-        console.log(resJSON)
-        setTimeRange(h24ToTimeRange(resJSON.time_range))
-        console.log(h24ToTimeRange(resJSON.time_range))
-        setDates(resJSON.dates.map((d: string) => new Date(d)))
-        setSchedule(resJSON.schedule)
-      })
-    })
-  }
-
-  useEffect(() => {
-    getRoom()
-  }, [])
 
   return (
     <main className="gap-x-8">
@@ -224,32 +189,23 @@ const Create = () => {
           </div>
         </div>
 
-        {isCreate && (
-          <CreateOptions
-            dates={dates}
-            setDates={setDates}
-            timeRange={timeRange}
-            setTimeRange={setTimeRange}
-            slotLength={slotLength}
-            setSlotLength={setSlotLength}
-          />
-        )}
-
-        {!isCreate && (
-          <div>
-            <div className="flex flex-row gap-x-2 items-center">
-              You <div className="w-3 h-3 rounded bg-red-500" />
-            </div>
-          </div>
-        )}
+        <CreateOptions
+          dates={dates}
+          setDates={setDates}
+          timeRange={timeRange}
+          setTimeRange={setTimeRange}
+          slotLength={slotLength}
+          setSlotLength={setSlotLength}
+        />
 
         {dates.length > 0 && (
           <Schedule
             dates={dates}
             timeRange={timeRange}
             slotLength={slotLength}
-            schedule={schedule}
-            setSchedule={setSchedule}
+            isCreate={true}
+            userSchedule={schedule}
+            setUserSchedule={setSchedule}
           />
         )}
       </div>

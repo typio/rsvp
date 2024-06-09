@@ -10,14 +10,19 @@ const Schedule = ({
   dates,
   timeRange,
   slotLength,
-  schedule,
-  setSchedule
+  userSchedule,
+  othersSchedule,
+  setUserSchedule,
+  setOthersSchedule
 }: {
   dates: Date[]
   timeRange: any
   slotLength: number
-  schedule: boolean[][]
-  setSchedule: React.Dispatch<boolean[][]>
+  isCreate: boolean
+  userSchedule: boolean[][]
+  setUserSchedule: React.Dispatch<boolean[][]>
+  othersSchedule?: string[][][]
+  setOthersSchedule?: React.Dispatch<string[][][]>
 }) => {
   const timeDifference =
     (Number(timeRange.to.hour) +
@@ -28,10 +33,10 @@ const Schedule = ({
   const timeSlots = timeDifference / slotLength
 
   useEffect(() => {
-    setSchedule(
+    setUserSchedule(
       dates.map((_, dayIndex) =>
         Array.from({ length: timeSlots }).map(
-          (_, timeIndex) => schedule?.[dayIndex]?.[timeIndex] ?? false
+          (_, timeIndex) => userSchedule?.[dayIndex]?.[timeIndex] ?? false
         )
       )
     )
@@ -78,7 +83,7 @@ const Schedule = ({
   const applySelection = (selection: Selection) => {
     if (selection.range == null) return
 
-    let newSchedule = [...schedule]
+    let newSchedule = [...userSchedule]
 
     const [lesserDI, greaterDI] = [
       selection.range.from.dateIndex,
@@ -96,7 +101,120 @@ const Schedule = ({
       }
     }
 
-    setSchedule(newSchedule)
+    setUserSchedule(newSchedule)
+  }
+
+  const DayColumn = ({
+    date,
+    dateIndex,
+    day
+  }: {
+    date: Date
+    dateIndex: number
+    day: boolean[]
+  }) => {
+    return (
+      <div className="flex flex-grow">
+        <div className="flex flex-col flex-grow">
+          <div
+            className="flex flex-grow flex-col justify-center items-center "
+            style={{ height: HEADER_HEIGHT }}
+          >
+            <div>
+              {date.toLocaleString('en-US', {
+                month: 'numeric',
+                day: 'numeric'
+              })}
+            </div>
+            <div>
+              {date.toLocaleString('en-US', {
+                weekday: 'short'
+              })}
+            </div>
+          </div>
+          {day?.map((valueAtTime, timeIndex) => (
+            <Slot
+              valueAtTime={valueAtTime}
+              timeIndex={timeIndex}
+              dateIndex={dateIndex}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const Slot = ({
+    valueAtTime,
+    timeIndex,
+    dateIndex
+  }: {
+    valueAtTime: any
+    timeIndex: any
+    dateIndex: any
+  }) => {
+    let isCellSelected = valueAtTime
+    let isCurrentlySelected = false
+
+    if (currentSelection.range != null) {
+      const [lesserDI, greaterDI] = [
+        currentSelection.range.from.dateIndex,
+        currentSelection.range.to.dateIndex
+      ].sort((a, b) => a - b)
+
+      const [lesserTI, greaterTI] = [
+        currentSelection.range.from.timeIndex,
+        currentSelection.range.to.timeIndex
+      ].sort((a, b) => a - b)
+
+      if (
+        dateIndex >= lesserDI &&
+        dateIndex <= greaterDI &&
+        timeIndex >= lesserTI &&
+        timeIndex <= greaterTI
+      ) {
+        isCurrentlySelected = true
+      }
+    }
+
+    return (
+      <div
+        key={`time-cell-${dateIndex}-${timeIndex}`}
+        className={`flex flex-grow w-full p-[2px] justify-center items-center ${isCellSelected ? 'hover:*:bg-accent' : 'hover:*:bg-accent '}`}
+        style={{ height: CELL_HEIGHT }}
+        onMouseDown={() => {
+          setIsMouseDown(true)
+          setCurrentSelection({
+            range: {
+              from: { dateIndex, timeIndex },
+              to: { dateIndex, timeIndex }
+            },
+            additive: !isCellSelected
+          })
+        }}
+        onMouseEnter={() => {
+          if (isMouseDown) {
+            setCurrentSelection({
+              range: {
+                from: currentSelection.range?.from ?? {
+                  dateIndex,
+                  timeIndex
+                },
+                to: { dateIndex, timeIndex }
+              },
+              additive: currentSelection.additive
+            })
+          }
+        }}
+        onMouseUp={() => {
+          setIsMouseDown(false)
+        }}
+      >
+        <div
+          className={`rounded w-full h-full ${isCurrentlySelected ? 'bg-accent' : isCellSelected ? 'bg-secondary' : 'bg-background'}`}
+        />
+      </div>
+    )
   }
 
   return (
@@ -138,134 +256,19 @@ const Schedule = ({
               key={`day-column-${dateIndex}`}
               date={date}
               dateIndex={dateIndex}
-              day={schedule[dateIndex]}
-              HEADER_HEIGHT={HEADER_HEIGHT}
-              CELL_HEIGHT={CELL_HEIGHT}
-              currentSelection={currentSelection}
-              setCurrentSelection={setCurrentSelection}
-              isMouseDown={isMouseDown}
-              setIsMouseDown={setIsMouseDown}
+              day={userSchedule[dateIndex]}
             />
           ))}
         </div>
         <div className="flex flex-row justify-end pt-2">
           <Button
             onClick={() =>
-              setSchedule([...schedule].map(day => day.map(_ => false)))
+              setUserSchedule([...userSchedule].map(day => day.map(_ => false)))
             }
           >
             <FontAwesomeIcon icon={faEraser} />
           </Button>
         </div>
-      </div>
-    </div>
-  )
-}
-
-const DayColumn = ({
-  date,
-  dateIndex,
-  day,
-  HEADER_HEIGHT,
-  CELL_HEIGHT,
-  currentSelection,
-  setCurrentSelection,
-  isMouseDown,
-  setIsMouseDown
-}: {
-  date: Date
-  dateIndex: number
-  day: boolean[]
-  HEADER_HEIGHT: number
-  CELL_HEIGHT: number
-  currentSelection: any
-  setCurrentSelection: any
-  isMouseDown: any
-  setIsMouseDown: any
-}) => {
-  return (
-    <div className="flex flex-grow">
-      <div className="flex flex-col flex-grow">
-        <div
-          className="flex flex-grow flex-col justify-center items-center "
-          style={{ height: HEADER_HEIGHT }}
-        >
-          <div>
-            {date.toLocaleString('en-US', {
-              month: 'numeric',
-              day: 'numeric'
-            })}
-          </div>
-          <div>
-            {date.toLocaleString('en-US', {
-              weekday: 'short'
-            })}
-          </div>
-        </div>
-        {day?.map((valueAtTime, timeIndex) => {
-          let isCellSelected = valueAtTime
-          let isCurrentlySelected = false
-
-          if (currentSelection.range != null) {
-            const [lesserDI, greaterDI] = [
-              currentSelection.range.from.dateIndex,
-              currentSelection.range.to.dateIndex
-            ].sort((a, b) => a - b)
-
-            const [lesserTI, greaterTI] = [
-              currentSelection.range.from.timeIndex,
-              currentSelection.range.to.timeIndex
-            ].sort((a, b) => a - b)
-
-            if (
-              dateIndex >= lesserDI &&
-              dateIndex <= greaterDI &&
-              timeIndex >= lesserTI &&
-              timeIndex <= greaterTI
-            ) {
-              isCurrentlySelected = true // currentSelection.additive
-            }
-          }
-
-          return (
-            <div
-              key={`time-cell-${dateIndex}-${timeIndex}`}
-              className={`flex flex-grow w-full p-[2px] justify-center items-center ${isCellSelected ? 'hover:*:bg-accent' : 'hover:*:bg-accent '}`}
-              style={{ height: CELL_HEIGHT }}
-              onMouseDown={() => {
-                setIsMouseDown(true)
-                setCurrentSelection({
-                  range: {
-                    from: { dateIndex, timeIndex },
-                    to: { dateIndex, timeIndex }
-                  },
-                  additive: !isCellSelected
-                })
-              }}
-              onMouseEnter={() => {
-                if (isMouseDown) {
-                  setCurrentSelection({
-                    range: {
-                      from: currentSelection.range?.from ?? {
-                        dateIndex,
-                        timeIndex
-                      },
-                      to: { dateIndex, timeIndex }
-                    },
-                    additive: currentSelection.additive
-                  })
-                }
-              }}
-              onMouseUp={() => {
-                setIsMouseDown(false)
-              }}
-            >
-              <div
-                className={`rounded w-full h-full ${isCurrentlySelected ? 'bg-accent' : isCellSelected ? 'bg-secondary' : 'bg-background'}`}
-              />
-            </div>
-          )
-        })}
       </div>
     </div>
   )

@@ -10,6 +10,7 @@ use sqlx::Pool;
 use std::env;
 use std::ops::Div;
 use std::ops::Rem;
+use std::str::FromStr;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use tide::http::Cookie;
@@ -60,9 +61,15 @@ struct CreateRoomReq {
 struct GetRoomRes {
     dates: Vec<String>,
     slot_length: u8,
-    schedule: Vec<Vec<Vec<String>>>,
+    user_schedule: Vec<Vec<bool>>,
+    others_schedule: Vec<Vec<Vec<String>>>,
     time_range: TimeRange,
     users: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct EditRoomReq {
+    schedule: Vec<Vec<bool>>,
 }
 
 #[async_std::main]
@@ -83,9 +90,23 @@ async fn main() -> tide::Result<()> {
 
     app.at("/api/rooms").post(create_room);
     app.at("/api/rooms/:slug").get(get_room);
+    app.at("/api/rooms/:slug").patch(edit_room);
     app.listen("127.0.0.1:3632").await?;
 
     Ok(())
+}
+
+async fn edit_room(req: Request<State>) -> tide::Result {
+    let room_uid: String = req.param("slug")?.to_string();
+    let mut response = Response::new(StatusCode::Ok);
+
+    // get current user
+
+    // get previous schedule
+    // update schedule
+    // save new schedule
+
+    Ok(response)
 }
 
 async fn get_room(req: Request<State>) -> tide::Result {
@@ -101,6 +122,36 @@ async fn get_room(req: Request<State>) -> tide::Result {
     )
     .fetch_one(&req.state().db_pool)
     .await?;
+
+    let user_uid = get_user_uid_from_cookie(&req)
+        .await
+        .unwrap_or(String::from_str("none")?);
+
+    let schedule: Vec<Vec<Vec<String>>> = serde_json::from_str(&room.schedule.unwrap())?;
+    let (user_schedule, others_schedule): (Vec<Vec<bool>>, Vec<Vec<Vec<String>>>) = schedule
+        .into_iter()
+        .map(|row| {
+            row.into_iter()
+                .map(|cell| {
+                    let mut is_user_in_cell = false;
+                    let mut others_in_cell = Vec::with_capacity(cell.len());
+
+                    for uid in cell {
+                        if uid == user_uid {
+                            is_user_in_cell = true;
+                        } else {
+                            others_in_cell.push(uid);
+                        }
+                    }
+
+                    (is_user_in_cell, others_in_cell)
+                })
+                .unzip()
+        })
+        .unzip();
+
+    let user_schedule_json = json!(user_schedule);
+    let others_schedule_json = json!(others_schedule);
 
     let users_of_room_records = sqlx::query!(
         r#"
@@ -122,7 +173,8 @@ async fn get_room(req: Request<State>) -> tide::Result {
         r#"{{
                 "dates": {},
                 "slot_length": {},
-                "schedule": {},
+                "user_schedule": {},
+                "others_schedule": {},
                 "time_range": {{
                     "from_hour": {},
                     "to_hour": {}
@@ -131,7 +183,8 @@ async fn get_room(req: Request<State>) -> tide::Result {
             }}"#,
         room.dates.unwrap(),
         room.slot_length.unwrap(),
-        room.schedule.unwrap(),
+        user_schedule_json,
+        others_schedule_json,
         room.time_min.unwrap(),
         room.time_max.unwrap(),
         users_of_room.join(", ")
@@ -153,40 +206,13 @@ async fn create_room(mut req: Request<State>) -> tide::Result {
     });
 
     let mut response = Response::new(StatusCode::Ok);
-    let mut user_uid: Option<String> = None;
-
-    let auth_cookie = req.cookie("auth_token");
-
-    if let Some(auth_cookie) = auth_cookie {
-        let client_auth_token = auth_cookie.value().to_string();
-
-        user_uid = match sqlx::query!(
-            r#"
-                SELECT * FROM users
-                WHERE auth_token=?
-                "#,
-            client_auth_token
-        )
-        .fetch_one(&req.state().db_pool)
-        .await
-        {
-            Ok(res) => Some(res.uid),
-            Err(_) => None,
-        }
-    }
+    let mut user_uid: Option<String> = get_user_uid_from_cookie(&req).await;
 
     if user_uid == None {
-        match signup(&req.state().db_pool).await {
-            Ok(res) => {
-                user_uid = Some(res.user_uid);
-                response.insert_cookie(
-                    Cookie::build("auth_token", res.auth_token)
-                        .http_only(true)
-                        .path("/")
-                        .expires(OffsetDateTime::now_utc() + Duration::days(400))
-                        .same_site(tide::http::cookies::SameSite::Strict)
-                        .finish(),
-                );
+        match signup(req.state().db_pool.clone()).await {
+            Ok((signup_result, cookie)) => {
+                user_uid = Some(signup_result.user_uid);
+                response.insert_cookie(cookie);
             }
             Err(err) => {
                 println!("{}", err);
@@ -268,9 +294,34 @@ struct SignupResult {
     user_uid: String,
 }
 
-async fn signup(pool: &Pool<MySql>) -> Result<SignupResult, sqlx::Error> {
+async fn get_user_uid_from_cookie(req: &Request<State>) -> Option<String> {
+    let mut user_uid = None;
+    let auth_cookie = req.cookie("auth_token");
+
+    if let Some(auth_cookie) = auth_cookie {
+        let client_auth_token = auth_cookie.value().to_string();
+
+        user_uid = match sqlx::query!(
+            r#"
+                SELECT * FROM users
+                WHERE auth_token=?
+                "#,
+            client_auth_token
+        )
+        .fetch_one(&req.state().db_pool)
+        .await
+        {
+            Ok(res) => Some(res.uid),
+            Err(_) => None,
+        }
+    }
+
+    user_uid
+}
+
+async fn signup(pool: Pool<MySql>) -> Result<(SignupResult, Cookie), sqlx::Error> {
     let user_uid = Uuid::new_v4().to_string();
-    let auth_token = format!("{}", generate_auth_token());
+    let auth_token = generate_auth_token();
 
     match sqlx::query!(
         r#"
@@ -280,14 +331,22 @@ async fn signup(pool: &Pool<MySql>) -> Result<SignupResult, sqlx::Error> {
         user_uid,
         auth_token
     )
-    .execute(pool)
+    .execute(&pool)
     .await
     {
         Ok(_) => {
-            return Ok(SignupResult {
-                auth_token,
-                user_uid,
-            })
+            return Ok((
+                SignupResult {
+                    auth_token: auth_token.clone(),
+                    user_uid,
+                },
+                Cookie::build("auth_token", auth_token)
+                    .http_only(true)
+                    .path("/")
+                    .expires(OffsetDateTime::now_utc() + Duration::days(400))
+                    .same_site(tide::http::cookies::SameSite::Strict)
+                    .finish(),
+            ))
         }
         Err(err) => return Err(err),
     }
