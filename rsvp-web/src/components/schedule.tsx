@@ -2,45 +2,39 @@ import { faEraser } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
 import { Button } from './ui/button'
+import { ScheduleData } from '@/types'
 
 const HEADER_HEIGHT = 44
 const CELL_HEIGHT = 16
 
 const Schedule = ({
-  dates,
-  timeRange,
-  slotLength,
-  userSchedule,
-  othersSchedule,
-  setUserSchedule,
-  setOthersSchedule
+  data,
+  setData,
+  isCreate
 }: {
-  dates: Date[]
-  timeRange: any
-  slotLength: number
+  data: ScheduleData
+  setData: React.Dispatch<ScheduleData>
   isCreate: boolean
-  userSchedule: boolean[][]
-  setUserSchedule: React.Dispatch<boolean[][]>
-  othersSchedule?: string[][][]
-  setOthersSchedule?: React.Dispatch<string[][][]>
 }) => {
   const timeDifference =
-    (Number(timeRange.to.hour) +
-      (timeRange.to.isAM ? 0 : 12) -
-      (Number(timeRange.from.hour) + (timeRange.from.isAM ? 0 : 12))) *
+    (Number(data.timeRange.to.hour) +
+      (data.timeRange.to.isAM ? 0 : 12) -
+      (Number(data.timeRange.from.hour) +
+        (data.timeRange.from.isAM ? 0 : 12))) *
     60
 
-  const timeSlots = timeDifference / slotLength
+  const timeSlots = timeDifference / data.slotLength
 
   useEffect(() => {
-    setUserSchedule(
-      dates.map((_, dayIndex) =>
+    setData({
+      ...data,
+      userSchedule: data.dates.map((_, dayIndex) =>
         Array.from({ length: timeSlots }).map(
-          (_, timeIndex) => userSchedule?.[dayIndex]?.[timeIndex] ?? false
+          (_, timeIndex) => data.userSchedule?.[dayIndex]?.[timeIndex] ?? false
         )
       )
-    )
-  }, [dates, timeRange, slotLength])
+    })
+  }, [data.dates, data.timeRange, data.slotLength])
 
   type SelectionPoint = {
     dateIndex: number
@@ -83,7 +77,7 @@ const Schedule = ({
   const applySelection = (selection: Selection) => {
     if (selection.range == null) return
 
-    let newSchedule = [...userSchedule]
+    let newSchedule = [...data.userSchedule]
 
     const [lesserDI, greaterDI] = [
       selection.range.from.dateIndex,
@@ -101,17 +95,19 @@ const Schedule = ({
       }
     }
 
-    setUserSchedule(newSchedule)
+    setData({ ...data, userSchedule: newSchedule })
   }
 
   const DayColumn = ({
     date,
     dateIndex,
-    day
+    dayUser,
+    dayOthers
   }: {
     date: Date
     dateIndex: number
-    day: boolean[]
+    dayUser: boolean[]
+    dayOthers: string[][]
   }) => {
     return (
       <div className="flex flex-grow">
@@ -132,9 +128,11 @@ const Schedule = ({
               })}
             </div>
           </div>
-          {day?.map((valueAtTime, timeIndex) => (
+          {dayUser?.map((value, timeIndex) => (
             <Slot
-              valueAtTime={valueAtTime}
+              key={timeIndex}
+              userValue={value}
+              othersValue={dayOthers[timeIndex]}
               timeIndex={timeIndex}
               dateIndex={dateIndex}
             />
@@ -145,15 +143,17 @@ const Schedule = ({
   }
 
   const Slot = ({
-    valueAtTime,
+    userValue,
+    othersValue,
     timeIndex,
     dateIndex
   }: {
-    valueAtTime: any
-    timeIndex: any
-    dateIndex: any
+    userValue: boolean
+    othersValue: string[]
+    timeIndex: number
+    dateIndex: number
   }) => {
-    let isCellSelected = valueAtTime
+    let isCellSelected = userValue
     let isCurrentlySelected = false
 
     if (currentSelection.range != null) {
@@ -211,7 +211,7 @@ const Schedule = ({
         }}
       >
         <div
-          className={`rounded w-full h-full ${isCurrentlySelected ? 'bg-accent' : isCellSelected ? 'bg-secondary' : 'bg-background'}`}
+          className={`rounded w-full h-full ${isCurrentlySelected ? 'bg-accent' : isCellSelected ? 'bg-secondary' : othersValue?.length > 0 ? 'bg-red-500' : 'bg-background'}`}
         />
       </div>
     )
@@ -219,7 +219,7 @@ const Schedule = ({
 
   return (
     <div>
-      <div className="flex flex-col p-6 bg-border rounded-lg select-none">
+      <div className="flex flex-col p-6 bg-card rounded-lg select-none">
         <div className="flex flex-row overflow-x-scroll pb-4">
           <div
             className="flex flex-col justify-between"
@@ -239,31 +239,37 @@ const Schedule = ({
                 }}
               >
                 {`${(
-                  Math.floor((i * slotLength) / 60) +
-                  Number(timeRange.from.hour)
+                  Math.floor((i * data.slotLength) / 60) +
+                  Number(data.timeRange.from.hour)
                 )
                   .toString()
                   .padStart(
                     2,
                     '0'
-                  )}:${((i * slotLength) % 60).toString().padStart(2, '0')}`}
+                  )}:${((i * data.slotLength) % 60).toString().padStart(2, '0')}`}
               </div>
             ))}
           </div>
 
-          {dates.map((date, dateIndex) => (
+          {data.dates.map((date, dateIndex) => (
             <DayColumn
               key={`day-column-${dateIndex}`}
               date={date}
               dateIndex={dateIndex}
-              day={userSchedule[dateIndex]}
+              dayUser={data.userSchedule[dateIndex]}
+              dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
             />
           ))}
         </div>
         <div className="flex flex-row justify-end pt-2">
           <Button
             onClick={() =>
-              setUserSchedule([...userSchedule].map(day => day.map(_ => false)))
+              setData({
+                ...data,
+                userSchedule: [...data.userSchedule].map(day =>
+                  day.map(_ => false)
+                )
+              })
             }
           >
             <FontAwesomeIcon icon={faEraser} />

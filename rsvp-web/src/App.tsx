@@ -4,9 +4,6 @@ import Footer from './Footer'
 import Create from './screens/Create'
 import Join from './screens/Join'
 
-const pathname = window.location
-console.log(pathname)
-
 const IsCreateContext = createContext<any>(null)
 
 const App = () => {
@@ -22,7 +19,7 @@ const App = () => {
       <div className="py-8 px-8 min-h-[100vh] grid grid-rows-[auto_1fr_auto] gap-y-8">
         <Header />
         <IsCreateContext.Provider value={isCreate}>
-          {isCreate ? <Create /> : <Join />}
+          {isCreate ? <Create setIsCreate={setIsCreate}/> : <Join />}
         </IsCreateContext.Provider>
         <Footer />
       </div>

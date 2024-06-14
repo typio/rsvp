@@ -1,5 +1,6 @@
-CREATE TABLE IF NOT EXISTS rooms (
+CREATE TABLE rooms (
     uid VARCHAR(36) PRIMARY KEY,
+    event_name VARCHAR(64),
     dates JSON,
     day_count TINYINT UNSIGNED,
     time_min TINYINT UNSIGNED,
@@ -9,14 +10,16 @@ CREATE TABLE IF NOT EXISTS rooms (
     expires_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     uid VARCHAR(36) PRIMARY KEY,
     auth_token VARCHAR(64),
-    name VARCHAR(64)
+    default_name VARCHAR(64)
 );
 
-CREATE TABLE IF NOT EXISTS users_of_rooms (
+CREATE TABLE users_of_rooms (
     user_uid VARCHAR(36),
     room_uid VARCHAR(36),
-    is_admin BOOL
+    name VARCHAR(64),
+    is_owner BOOL,
+    UNIQUE KEY unique_user (user_uid, room_uid)
 );

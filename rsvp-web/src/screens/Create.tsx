@@ -13,20 +13,14 @@ import { DatePickerMultiple } from '@/components/datepicker'
 import Schedule from '.././components/schedule'
 import { ToggleGroup, ToggleGroupItem } from '.././components/ui/toggle-group'
 import { h12To24 } from '@/utils'
+import { ScheduleData } from '@/types'
 
 const storedCreateState = ((storedStr: string | null) =>
   typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
   localStorage.getItem('storedCreateState')
 )
 
-const CreateOptions = ({
-  dates,
-  setDates,
-  timeRange,
-  setTimeRange,
-  slotLength,
-  setSlotLength
-}: any) => {
+const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
   const handeTimeInput = (e: any, isFrom: boolean) => {
     const newValue = Number(e.target.value)
     let newHour = 0
@@ -41,17 +35,45 @@ const CreateOptions = ({
       newHour = newValue
     }
 
-    setTimeRange({
-      ...timeRange,
-      [isFrom ? 'from' : 'to']: {
-        hour: newHour.toString(),
-        isAM: timeRange.from.isAM
+    setScheduleData({
+      ...scheduleData,
+      timeRange: {
+        ...scheduleData.timeRange,
+        [isFrom ? 'from' : 'to']: {
+          hour: newHour.toString(),
+          isAM: scheduleData.timeRange.from.isAM
+        }
       }
     })
   }
+
   return (
-    <div>
-      <DatePickerMultiple dates={dates} setDates={setDates} />
+    <div className="flex flex-col bg-card rounded-md p-4 gap-y-4">
+      <div className="flex flex-row gap-x-4 ">
+        <div className="flex flex-col gap-y-1 flex-1">
+          <label className="text-sm font-medium text-muted-foreground">
+            Event name
+          </label>
+          <Input
+            value={scheduleData.event_name}
+            onChange={e =>
+              setScheduleData({
+                ...scheduleData,
+                event_name: e.target.value
+              })
+            }
+          />
+        </div>
+        <Button onClick={shareRoom}>
+          <FontAwesomeIcon icon={faShare} />
+        </Button>
+      </div>
+      <DatePickerMultiple
+        dates={scheduleData.dates}
+        setDates={newDates => {
+          setScheduleData({ ...scheduleData, dates: newDates })
+        }}
+      />
       <div className="flex flex-row gap-x-8">
         <div className="flex flex-row flex-1 gap-x-2">
           <Input
@@ -62,20 +84,23 @@ const CreateOptions = ({
             onChange={e => {
               handeTimeInput(e, true)
             }}
-            value={timeRange.from.hour}
+            value={scheduleData.timeRange.from.hour}
           />
           <Button
             onClick={() =>
-              setTimeRange({
-                ...timeRange,
-                from: {
-                  hour: timeRange.from.hour,
-                  isAM: !timeRange.from.isAM
+              setScheduleData({
+                ...scheduleData,
+                timeRange: {
+                  ...scheduleData.timeRange,
+                  from: {
+                    hour: scheduleData.timeRange.from.hour,
+                    isAM: !scheduleData.timeRange.from.isAM
+                  }
                 }
               })
             }
           >
-            {timeRange.from.isAM ? 'AM' : 'PM'}
+            {scheduleData.timeRange.from.isAM ? 'AM' : 'PM'}
           </Button>
         </div>
         <div className="flex flex-row flex-1 gap-x-2">
@@ -86,20 +111,23 @@ const CreateOptions = ({
             onChange={e => {
               handeTimeInput(e, false)
             }}
-            value={timeRange.to.hour}
+            value={scheduleData.timeRange.to.hour}
           />
           <Button
             onClick={() =>
-              setTimeRange({
-                ...timeRange,
-                to: {
-                  hour: timeRange.to.hour,
-                  isAM: !timeRange.to.isAM
+              setScheduleData({
+                ...scheduleData,
+                timeRange: {
+                  ...scheduleData.timeRange,
+                  from: {
+                    hour: scheduleData.timeRange.from.hour,
+                    isAM: !scheduleData.timeRange.from.isAM
+                  }
                 }
               })
             }
           >
-            {timeRange.to.isAM ? 'AM' : 'PM'}
+            {scheduleData.timeRange.to.isAM ? 'AM' : 'PM'}
           </Button>
         </div>
       </div>
@@ -111,59 +139,74 @@ const CreateOptions = ({
         <ToggleGroup
           id="slot-length"
           type="single"
-          onValueChange={e => setSlotLength(Number(e))}
-          value={String(slotLength)}
+          onValueChange={e =>
+            setScheduleData({ ...scheduleData, slotLength: Number(e) })
+          }
+          value={String(scheduleData.slotLength)}
         >
-          <ToggleGroupItem value={'15'}>15 min</ToggleGroupItem>
-          <ToggleGroupItem value={'20'}>20 min</ToggleGroupItem>
-          <ToggleGroupItem value={'30'}>30 min</ToggleGroupItem>
-          <ToggleGroupItem value={'60'}>1 hour</ToggleGroupItem>
+          <ToggleGroupItem value={'15'} className="w-20">
+            15 min
+          </ToggleGroupItem>
+          <ToggleGroupItem value={'20'} className="w-20">
+            20 min
+          </ToggleGroupItem>
+          <ToggleGroupItem value={'30'} className="w-20">
+            30 min
+          </ToggleGroupItem>
+          <ToggleGroupItem value={'60'} className="w-20">
+            1 hour
+          </ToggleGroupItem>
         </ToggleGroup>
       </div>
     </div>
   )
 }
 
-const Create = () => {
-  const [dates, setDates] = useState<Date[]>(
-    storedCreateState?.dates.map((d: string) => new Date(d)) ??
+const Create = ({ setIsCreate }) => {
+  const [scheduleData, setScheduleData] = useState<ScheduleData>({
+    event_name: '',
+    dates:
+      storedCreateState?.dates.map((d: string) => new Date(d)) ??
       Array.from({ length: 7 }).map((_, i) =>
         addDays(startOfDay(new Date()), i)
-      )
-  )
-
-  const [timeRange, setTimeRange] = useState(
-    storedCreateState?.timeRange ?? {
+      ),
+    timeRange: storedCreateState?.timeRange ?? {
       from: { hour: '9', isAM: true },
       to: { hour: '5', isAM: false }
-    }
-  )
-
-  const [slotLength, setSlotLength] = useState(
-    storedCreateState?.slotLength ?? 30
-  )
-
-  const [schedule, setSchedule] = useState<boolean[][]>(
-    storedCreateState?.schedule ?? []
-  )
+    },
+    slotLength: storedCreateState?.slotLength ?? 30,
+    userSchedule: storedCreateState?.userSchedule ?? [],
+    othersSchedule: []
+  })
 
   useEffect(() => {
-    localStorage.setItem(
-      'storedCreateState',
-      JSON.stringify({ dates, timeRange, slotLength, schedule })
-    )
-  }, [dates, timeRange, slotLength, schedule])
+    localStorage.setItem('storedCreateState', JSON.stringify(scheduleData))
+  }, [
+    scheduleData.event_name,
+    scheduleData.dates,
+    scheduleData.timeRange,
+    scheduleData.slotLength,
+    scheduleData.userSchedule
+  ])
 
   const shareRoom = () => {
     let req = JSON.stringify({
-      dates: dates,
+      event_name: scheduleData.event_name,
+      dates: scheduleData.dates,
       time_range: {
         from_hour:
-          h12To24(Number(timeRange.from.hour), timeRange.from.isAM) || 0,
-        to_hour: h12To24(Number(timeRange.to.hour), timeRange.to.isAM) || 0
+          h12To24(
+            Number(scheduleData.timeRange.from.hour),
+            scheduleData.timeRange.from.isAM
+          ) || 0,
+        to_hour:
+          h12To24(
+            Number(scheduleData.timeRange.to.hour),
+            scheduleData.timeRange.to.isAM
+          ) || 0
       },
-      slot_length: slotLength,
-      schedule: schedule
+      slot_length: scheduleData.slotLength,
+      schedule: scheduleData.userSchedule
     })
     fetch('http://localhost:3632/api/rooms', {
       method: 'POST',
@@ -173,6 +216,7 @@ const Create = () => {
       res.json().then(resJSON => {
         console.log(resJSON)
         history.pushState({ page: 1 }, 'room', `/${resJSON.room_uid}`)
+        setIsCreate(false)
       })
     })
   }
@@ -180,32 +224,19 @@ const Create = () => {
   return (
     <main className="gap-x-8">
       <div className="flex flex-col gap-2">
-        <div className="flex flex-col">
-          <div className="flex flex-row gap-x-4 ">
-            <Input placeholder="Event Name" />
-            <Button onClick={shareRoom}>
-              <FontAwesomeIcon icon={faShare} />
-            </Button>
-          </div>
-        </div>
+        <div className="flex flex-col"></div>
 
         <CreateOptions
-          dates={dates}
-          setDates={setDates}
-          timeRange={timeRange}
-          setTimeRange={setTimeRange}
-          slotLength={slotLength}
-          setSlotLength={setSlotLength}
+          scheduleData={scheduleData}
+          setScheduleData={setScheduleData}
+          shareRoom={shareRoom}
         />
 
-        {dates.length > 0 && (
+        {scheduleData.dates.length > 0 && (
           <Schedule
-            dates={dates}
-            timeRange={timeRange}
-            slotLength={slotLength}
+            data={scheduleData}
+            setData={setScheduleData}
             isCreate={true}
-            userSchedule={schedule}
-            setUserSchedule={setSchedule}
           />
         )}
       </div>

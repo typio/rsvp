@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
-
-import { addDays, startOfDay } from 'date-fns'
+import { useCallback, useEffect, useState } from 'react'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faShare } from '@fortawesome/free-solid-svg-icons'
@@ -9,123 +7,231 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 import Schedule from '.././components/schedule'
-import { h12To24, h24ToTimeRange } from '@/utils'
-
-const storedCreateState = ((storedStr: string | null) =>
-  typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
-  localStorage.getItem('storedCreateState')
-)
+import { h24ToTimeRange, useDebounce } from '@/utils'
+import { ScheduleData } from '@/types'
 
 const Join = () => {
-  const [slotLength, setSlotLength] = useState(
-    storedCreateState?.slotLength ?? 30
-  )
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<null | string>(null)
+  const [isInitialRender, setIsInitialRender] = useState(true)
 
-  const [dates, setDates] = useState<Date[]>(
-    storedCreateState?.dates.map((d: string) => new Date(d)) ??
-      Array.from({ length: 7 }).map((_, i) =>
-        addDays(startOfDay(new Date()), i)
-      )
-  )
-
-  const [timeRange, setTimeRange] = useState(
-    storedCreateState?.timeRange ?? {
-      from: { hour: '9', isAM: true },
-      to: { hour: '5', isAM: false }
+  useEffect(() => {
+    if (isInitialRender) {
+      getRoom()
+      setIsInitialRender(false)
+      return
     }
-  )
+  }, [])
 
-  const [userSchedule, setUserSchedule] = useState<boolean[][]>(
-    storedCreateState?.schedule ?? []
-  )
+  const [scheduleData, setScheduleData] = useState<ScheduleData>()
+  const [others, setOthers] = useState([])
+  const [isOwner, setIsOwner] = useState(false)
 
-  const [othersSchedule, setOthersSchedule] = useState<string[][][]>(
-    storedCreateState?.schedule ?? []
-  )
+  const getRoom = useCallback(() => {
+    try {
+      fetch(
+        `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}`,
+        {
+          method: 'GET',
+          credentials: 'include'
+        }
+      ).then(res => {
+        res.json().then(resJSON => {
+          setScheduleData({
+            event_name: resJSON.event_name,
+            dates: resJSON.dates.map((d: string) => new Date(d)),
+            timeRange: h24ToTimeRange(resJSON.time_range),
+            slotLength: resJSON.slot_length,
+            userSchedule: resJSON.user_schedule,
+            othersSchedule: resJSON.others_schedule
+          })
+          setOthers(resJSON.others_names)
+          setIsOwner(resJSON.is_owner)
 
-  const getRoom = () => {
+          console.log('get room', resJSON)
+          setError(null)
+        })
+      })
+    } catch (e) {
+      setError(String(e))
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (loading) return
+
+    let req = JSON.stringify({
+      user_schedule: scheduleData?.userSchedule
+    })
+
     fetch(
       `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}`,
       {
-        method: 'GET',
+        method: 'PATCH',
+        body: req,
         credentials: 'include'
       }
     ).then(res => {
       res.json().then(resJSON => {
-        console.log(resJSON)
-        setTimeRange(h24ToTimeRange(resJSON.time_range))
-        setDates(resJSON.dates.map((d: string) => new Date(d)))
-        setSlotLength(resJSON.slot_length)
-        setUserSchedule(resJSON.user_schedule)
+        console.log('edit room', resJSON)
       })
     })
-  }
-
-  useEffect(() => {
-    getRoom()
-  }, [])
-
-  useEffect(() => {
-    console.log(userSchedule)
-
-    let req = JSON.stringify({
-      dates: dates,
-      time_range: {
-        from_hour:
-          h12To24(Number(timeRange.from.hour), timeRange.from.isAM) || 0,
-        to_hour: h12To24(Number(timeRange.to.hour), timeRange.to.isAM) || 0
-      },
-      slot_length: slotLength,
-      user_schedule: userSchedule
-    })
-    fetch('http://localhost:3632/api/rooms', {
-      method: 'POST',
-      body: req,
-      credentials: 'include'
-    }).then(res => {
-      res.json().then(resJSON => {
-        console.log(resJSON)
-      })
-    })
-  }, [userSchedule])
+  }, [scheduleData?.userSchedule])
 
   const shareRoom = () => {
     alert(window.location)
   }
 
+  if (loading)
+    return (
+      <div className="w-full h-full flex flex-row justify-center items-center animate-[delayedFadeIn_2s_ease-in-out]">
+        <svg className="w-7 h-7 animate-spin" viewBox="0 0 10 10">
+          <circle
+            cx={5}
+            cy={5}
+            r={4}
+            fill="none"
+            className="stroke-primary"
+            strokeWidth={1.4}
+          />
+          <circle
+            cx={5}
+            cy={5}
+            r={4}
+            fill="none"
+            className="stroke-secondary"
+            strokeWidth={1.4}
+            strokeDasharray={4 * 2 * Math.PI * 0.666}
+          />
+        </svg>
+      </div>
+    )
+
+  if (error)
+    return (
+      <div className="w-full h-full flex flex-row justify-center items-center">
+        Error "{error}"
+      </div>
+    )
+
   return (
     <main className="gap-x-8">
       <div className="flex flex-col gap-2">
-        <div className="flex flex-col">
-          <div className="flex flex-row gap-x-4 ">
-            <Input placeholder="Event Name" />
-            <Button onClick={shareRoom}>
+        <div className="flex flex-col gap-y-2 mb-4 bg-card p-4 rounded-md">
+          <div className="flex flex-row gap-x-4 items-end ">
+            {isOwner ? (
+              <div className="flex flex-col gap-y-1 flex-1">
+                <label className="text-sm font-medium text-muted-foreground">
+                  Event name
+                </label>
+                <DebouncedInputComponent
+                  initialValue={scheduleData?.event_name}
+                  onDebouncedChange={value => {
+                    fetch(
+                      `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}/eventNameChange`,
+                      {
+                        method: 'PATCH',
+                        body: JSON.stringify({ name: value }),
+                        credentials: 'include'
+                      }
+                    ).then(res => {
+                      res.json().then(resJSON => {
+                        console.log('edit room', resJSON)
+                      })
+                    })
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="mb-2 text-lg">{scheduleData?.event_name}</div>
+            )}
+
+            <Button onClick={shareRoom} className="ml-auto">
               <FontAwesomeIcon icon={faShare} />
             </Button>
           </div>
-        </div>
 
-        <div>
-          <div className="flex flex-row gap-x-2 items-center">
-            You <div className="w-3 h-3 rounded bg-red-500" />
+          <div className="flex flex-col gap-y-1">
+            <label className="text-sm font-medium text-muted-foreground">
+              Your name
+            </label>
+            <DebouncedInputComponent
+              initialValue="Jeff"
+              onDebouncedChange={value => {
+                fetch(
+                  `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}/userNameChange`,
+                  {
+                    method: 'PATCH',
+                    body: JSON.stringify({ name: value }),
+                    credentials: 'include'
+                  }
+                ).then(res => {
+                  res.json().then(resJSON => {
+                    console.log('edit room', resJSON)
+                  })
+                })
+              }}
+            />
           </div>
         </div>
 
-        {dates.length > 0 && (
+        <div className="flex flex-row justify-between">
+          <div className="flex flex-row gap-x-2 items-center">
+            You <div className="w-3 h-3 rounded bg-secondary" />
+          </div>
+
+          <div className="flex flex-row gap-x-4">
+            {others?.map((user: string, i) => (
+              <div key={i}>{user.slice(0, 5)}</div>
+            ))}
+          </div>
+        </div>
+
+        {scheduleData && scheduleData.dates.length > 0 && (
           <Schedule
-            dates={dates}
-            timeRange={timeRange}
-            slotLength={slotLength}
+            data={scheduleData}
+            setData={setScheduleData}
             isCreate={false}
-            userSchedule={userSchedule}
-            setUserSchedule={setUserSchedule}
-            othersSchedule={othersSchedule}
-            setOthersSchedule={setOthersSchedule}
           />
         )}
+
+        {/* TODO: Show drop down asking reason (e.g. No times work, I'm not coming, Custom, etc...) */}
+        <Button className="bg-destructive hover:bg-black">
+          <span className="text-destructive-foreground">I can't make it.</span>
+        </Button>
       </div>
     </main>
   )
+}
+
+const DebouncedInputComponent = ({
+  initialValue = '',
+  onChange,
+  onDebouncedChange,
+  debounceInterval = 500
+}: {
+  initialValue?: string
+  onChange?: (value: string) => any
+  onDebouncedChange?: (value: string) => any
+  debounceInterval?: number
+}) => {
+  const [value, setValue] = useState(initialValue)
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value
+    if (onChange) onChange(newValue)
+
+    setValue(newValue)
+  }
+
+  if (onDebouncedChange)
+    useEffect(
+      () => onDebouncedChange(value),
+      [useDebounce(value, debounceInterval)]
+    )
+
+  return <Input value={value} onChange={handleChange} />
 }
 
 export default Join
