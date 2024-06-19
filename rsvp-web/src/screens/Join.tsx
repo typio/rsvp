@@ -7,48 +7,110 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 import Schedule from '.././components/schedule'
-import { h24ToTimeRange, useDebounce } from '@/utils'
+import { h24ToTimeRange} from '@/utils'
 import { ScheduleData } from '@/types'
 
 const Join = () => {
+  const room_uid = window.location.pathname.slice(1)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<null | string>(null)
   const [isInitialRender, setIsInitialRender] = useState(true)
 
+  const [socket, setSocket] = useState<WebSocket | null>(null)
+
+  const handleWebSocketMessage = (message: {
+    message_type: string
+    payload: any
+  }) => {
+    switch (message.message_type) {
+      case 'editEventName':
+        setScheduleData(p => ({
+          ...p,
+          eventName: message.payload
+        }))
+        break
+      case 'editUserName':
+        setOthers(message.payload)
+        break
+      case 'editSchedule':
+        setScheduleData(p => ({
+          ...p,
+          othersSchedule: message.payload
+        }))
+        break
+      default:
+        console.log('Unknown WebSocket message:', message)
+    }
+  }
+
   useEffect(() => {
     if (isInitialRender) {
+      authenticate().then(auth_success => {
+        if (auth_success) {
+          const newSocket = new WebSocket(
+            `ws://localhost:3632/api/ws/${room_uid}`
+          )
+          setSocket(newSocket)
+
+          newSocket.onopen = () => {
+            console.log('WebSocket connection established')
+          }
+
+          newSocket.onmessage = event => {
+            const message = JSON.parse(event.data)
+            handleWebSocketMessage(message)
+          }
+
+          newSocket.onclose = () => {
+            console.log('WebSocket connection closed')
+          }
+        } else return
+      })
+
       getRoom()
       setIsInitialRender(false)
       return
     }
+
+    return () => {
+      socket?.close()
+    }
   }, [])
 
   const [scheduleData, setScheduleData] = useState<ScheduleData>()
-  const [others, setOthers] = useState([])
+  const [userName, setUserName] = useState<String>('')
+  const [others, setOthers] = useState<String[]>([])
   const [isOwner, setIsOwner] = useState(false)
+
+  const authenticate = async (): Promise<boolean> => {
+    let result = await fetch(`http://localhost:3632/api/auth`, {
+      method: 'POST',
+      credentials: 'include'
+    })
+
+    if (result.status === 200) return true
+    else return false
+  }
 
   const getRoom = useCallback(() => {
     try {
-      fetch(
-        `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}`,
-        {
-          method: 'GET',
-          credentials: 'include'
-        }
-      ).then(res => {
+      fetch(`http://localhost:3632/api/rooms/${room_uid}`, {
+        method: 'GET',
+        credentials: 'include'
+      }).then(res => {
         res.json().then(resJSON => {
           setScheduleData({
-            event_name: resJSON.event_name,
+            eventName: resJSON.event_name,
             dates: resJSON.dates.map((d: string) => new Date(d)),
             timeRange: h24ToTimeRange(resJSON.time_range),
             slotLength: resJSON.slot_length,
             userSchedule: resJSON.user_schedule,
             othersSchedule: resJSON.others_schedule
           })
-          setOthers(resJSON.others_names)
-          setIsOwner(resJSON.is_owner)
-
-          console.log('get room', resJSON)
+          setUserName(resJSON.user_name ?? '')
+          setOthers(resJSON.others_names ?? [])
+          setIsOwner(resJSON.is_owner ?? false)
           setError(null)
         })
       })
@@ -59,24 +121,17 @@ const Join = () => {
   }, [])
 
   useEffect(() => {
-    if (loading) return
+    if (loading || !socket || socket.readyState != socket.OPEN) return
 
-    let req = JSON.stringify({
-      user_schedule: scheduleData?.userSchedule
-    })
-
-    fetch(
-      `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}`,
-      {
-        method: 'PATCH',
-        body: req,
-        credentials: 'include'
-      }
-    ).then(res => {
-      res.json().then(resJSON => {
-        console.log('edit room', resJSON)
+    socket.send(
+      JSON.stringify({
+        message_type: 'editSchedule',
+        payload: {
+          user_name: userName,
+          user_schedule: scheduleData?.userSchedule
+        }
       })
-    })
+    )
   }, [scheduleData?.userSchedule])
 
   const shareRoom = () => {
@@ -125,26 +180,25 @@ const Join = () => {
                 <label className="text-sm font-medium text-muted-foreground">
                   Event name
                 </label>
-                <DebouncedInputComponent
-                  initialValue={scheduleData?.event_name}
-                  onDebouncedChange={value => {
-                    fetch(
-                      `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}/eventNameChange`,
-                      {
-                        method: 'PATCH',
-                        body: JSON.stringify({ name: value }),
-                        credentials: 'include'
-                      }
-                    ).then(res => {
-                      res.json().then(resJSON => {
-                        console.log('edit room', resJSON)
-                      })
-                    })
+                <Input
+                  value={scheduleData?.eventName}
+                  onChange={e => {
+                    const value = e.target.value
+                    setScheduleData(p => ({ ...p, eventName: value }))
+                    if (socket && socket.readyState == socket.OPEN)
+                      socket.send(
+                        JSON.stringify({
+                          message_type: 'editEventName',
+                          payload: {
+                            name: value
+                          }
+                        })
+                      )
                   }}
                 />
               </div>
             ) : (
-              <div className="mb-2 text-lg">{scheduleData?.event_name}</div>
+              <div className="mb-2 text-lg">{scheduleData?.eventName}</div>
             )}
 
             <Button onClick={shareRoom} className="ml-auto">
@@ -156,21 +210,20 @@ const Join = () => {
             <label className="text-sm font-medium text-muted-foreground">
               Your name
             </label>
-            <DebouncedInputComponent
-              initialValue="Jeff"
-              onDebouncedChange={value => {
-                fetch(
-                  `http://localhost:3632/api/rooms/${window.location.pathname.slice(1)}/userNameChange`,
-                  {
-                    method: 'PATCH',
-                    body: JSON.stringify({ name: value }),
-                    credentials: 'include'
-                  }
-                ).then(res => {
-                  res.json().then(resJSON => {
-                    console.log('edit room', resJSON)
-                  })
-                })
+            <Input
+              value={userName}
+              onChange={e => {
+                const value = e.target.value
+                setUserName(value)
+                if (socket && socket.readyState == socket.OPEN)
+                  socket.send(
+                    JSON.stringify({
+                      message_type: 'editUserName',
+                      payload: {
+                        name: value
+                      }
+                    })
+                  )
               }}
             />
           </div>
@@ -178,14 +231,19 @@ const Join = () => {
 
         <div className="flex flex-row justify-between">
           <div className="flex flex-row gap-x-2 items-center">
-            You <div className="w-3 h-3 rounded bg-secondary" />
+            You <div className="w-3 h-3 rounded bg-primary" />
           </div>
 
-          <div className="flex flex-row gap-x-4">
-            {others?.map((user: string, i) => (
-              <div key={i}>{user.slice(0, 5)}</div>
-            ))}
-          </div>
+          {others?.length > 0 && (
+            <div className="flex flex-row gap-x-2 items-center">
+              <div className="flex flex-row gap-x-4 items-center">
+                {others?.map((user: string, i) => (
+                  <div key={i}>{user?.length > 0 ? user : `User ${i}`}</div>
+                ))}
+              </div>
+              <div className="w-3 h-3 rounded bg-secondary" />
+            </div>
+          )}
         </div>
 
         {scheduleData && scheduleData.dates.length > 0 && (
@@ -196,42 +254,21 @@ const Join = () => {
           />
         )}
 
-        {/* TODO: Show drop down asking reason (e.g. No times work, I'm not coming, Custom, etc...) */}
-        <Button className="bg-destructive hover:bg-black">
-          <span className="text-destructive-foreground">I can't make it.</span>
-        </Button>
+        {/* TODO: Show drop down asking to confirm delete and one for asking reason (e.g. No times work, I'm not coming, Custom, etc...) */}
+        {isOwner ? (
+          <Button className="bg-red-600 hover:bg-red-700 mt-4">
+            <span className="text-destructive-foreground">Delete Event</span>
+          </Button>
+        ) : (
+          <Button className="bg-red-600 hover:bg-red-700 mt-4">
+            <span className="text-destructive-foreground">
+              I can't make it.
+            </span>
+          </Button>
+        )}
       </div>
     </main>
   )
-}
-
-const DebouncedInputComponent = ({
-  initialValue = '',
-  onChange,
-  onDebouncedChange,
-  debounceInterval = 500
-}: {
-  initialValue?: string
-  onChange?: (value: string) => any
-  onDebouncedChange?: (value: string) => any
-  debounceInterval?: number
-}) => {
-  const [value, setValue] = useState(initialValue)
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value
-    if (onChange) onChange(newValue)
-
-    setValue(newValue)
-  }
-
-  if (onDebouncedChange)
-    useEffect(
-      () => onDebouncedChange(value),
-      [useDebounce(value, debounceInterval)]
-    )
-
-  return <Input value={value} onChange={handleChange} />
 }
 
 export default Join

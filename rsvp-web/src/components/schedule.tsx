@@ -1,10 +1,13 @@
+import tinycolor from 'tinycolor2'
+
 import { faEraser } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
+import { Colors } from '@/colors'
 
-const HEADER_HEIGHT = 44
+const HEADER_HEIGHT = 64
 const CELL_HEIGHT = 16
 
 const Schedule = ({
@@ -113,7 +116,7 @@ const Schedule = ({
       <div className="flex flex-grow">
         <div className="flex flex-col flex-grow">
           <div
-            className="flex flex-grow flex-col justify-center items-center "
+            className="flex flex-grow flex-col justify-center items-center"
             style={{ height: HEADER_HEIGHT }}
           >
             <div>
@@ -122,7 +125,7 @@ const Schedule = ({
                 day: 'numeric'
               })}
             </div>
-            <div>
+            <div className="opacity-30 uppercase font-semibold text-xs">
               {date.toLocaleString('en-US', {
                 weekday: 'short'
               })}
@@ -177,6 +180,29 @@ const Schedule = ({
       }
     }
 
+    const userColor = tinycolor(`hsl(${Colors.dark.primary})`)
+    const otherColor = tinycolor(`hsl(${Colors.dark.secondary})`)
+
+    let bg_color: tinycolor.Instance
+    if ((isCurrentlySelected || isCellSelected) && othersValue?.length > 0) {
+      bg_color = tinycolor
+        .mix(userColor, otherColor, 60)
+        .darken(10)
+        .saturate(100)
+    } else if (isCellSelected || isCurrentlySelected) {
+      bg_color = userColor
+    } else if (othersValue?.length > 0) {
+      bg_color = otherColor
+    } else {
+      bg_color = tinycolor(`hsl(${Colors.dark.background})`)
+    }
+
+    if (isCurrentlySelected) {
+      bg_color.lighten(15)
+    }
+
+    let bg_color_string = bg_color.toHexString()
+
     return (
       <div
         key={`time-cell-${dateIndex}-${timeIndex}`}
@@ -211,7 +237,8 @@ const Schedule = ({
         }}
       >
         <div
-          className={`rounded w-full h-full ${isCurrentlySelected ? 'bg-accent' : isCellSelected ? 'bg-secondary' : othersValue?.length > 0 ? 'bg-red-500' : 'bg-background'}`}
+          className={`rounded w-full h-full`}
+          style={{ backgroundColor: bg_color_string }}
         />
       </div>
     )
@@ -222,7 +249,7 @@ const Schedule = ({
       <div className="flex flex-col p-6 bg-card rounded-lg select-none">
         <div className="flex flex-row overflow-x-scroll pb-4">
           <div
-            className="flex flex-col justify-between"
+            className="flex flex-col justify-between font-[courier] font-medium text-sm text-right opacity-30"
             style={{
               marginTop: HEADER_HEIGHT
             }}
@@ -230,7 +257,7 @@ const Schedule = ({
             {Array.from({ length: timeSlots + 1 }).map((_, i) => (
               <div
                 key={`timeLabel-${i}`}
-                className="text-sm text-right mx-2 text-muted-foreground"
+                className="mx-2 "
                 style={{
                   height: 0,
                   lineHeight: 0,
@@ -241,12 +268,7 @@ const Schedule = ({
                 {`${(
                   Math.floor((i * data.slotLength) / 60) +
                   Number(data.timeRange.from.hour)
-                )
-                  .toString()
-                  .padStart(
-                    2,
-                    '0'
-                  )}:${((i * data.slotLength) % 60).toString().padStart(2, '0')}`}
+                ).toString()}:${((i * data.slotLength) % 60).toString().padStart(2, '0')}`}
               </div>
             ))}
           </div>

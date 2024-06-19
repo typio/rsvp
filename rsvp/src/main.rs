@@ -1,20 +1,21 @@
 extern crate dotenv;
 
+mod utils;
+use utils::{generate_auth_token, generate_id};
+
+use async_std::prelude::*;
+use async_std::sync::Mutex;
 use core::panic;
 use dotenv::dotenv;
-use num_bigint::BigUint;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::mysql::MySqlPool;
 use sqlx::MySql;
 use sqlx::Pool;
+use std::collections::HashMap;
 use std::env;
-use std::ops::Div;
-use std::ops::Rem;
 use std::str::FromStr;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
+use std::sync::Arc;
 use tide::http::headers::HeaderValue;
 use tide::http::Cookie;
 use tide::prelude::*;
@@ -23,23 +24,32 @@ use tide::security::Origin;
 use tide::Request;
 use tide::Response;
 use tide::StatusCode;
+use tide_websockets::WebSocket;
+use tide_websockets::WebSocketConnection;
 use time::Duration;
 use time::OffsetDateTime;
 use time_new::ext::NumericalDuration;
 use uuid::Uuid;
 
+type RoomUID = String;
+type UserUID = String;
+
 #[derive(Clone)]
 struct State {
     db_pool: Pool<MySql>,
+    rooms: Arc<Mutex<HashMap<RoomUID, HashMap<UserUID, WebSocketConnection>>>>,
 }
 
 impl State {
     fn new(db_pool: Pool<MySql>) -> Self {
-        Self { db_pool }
+        Self {
+            db_pool,
+            rooms: Default::default(),
+        }
     }
 }
 
-#[derive(Debug, sqlx::FromRow)]
+#[derive(Debug, Clone, sqlx::FromRow)]
 struct UserOfRoom {
     room_uid: String,
     user_uid: String,
@@ -51,6 +61,12 @@ struct UserOfRoom {
 struct TimeRange {
     from_hour: u8,
     to_hour: u8,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct WSMessage {
+    message_type: String,
+    payload: serde_json::Value,
 }
 
 #[async_std::main]
@@ -69,14 +85,268 @@ async fn main() -> tide::Result<()> {
 
     app.with(cors);
 
+    app.at("/api/auth").post(authenticate);
     app.at("/api/rooms").post(create_room);
-    app.at("/api/rooms/:slug").get(get_room);
-    app.at("/api/rooms/:slug").patch(edit_room);
-    app.at("/api/rooms/:slug/eventNameChange")
-        .patch(edit_room_event_name);
-    app.at("/api/rooms/:slug/userNameChange")
-        .patch(edit_room_user_name);
+    app.at("/api/rooms/:room_uid").get(get_room);
+
+    app.at("/api/ws/:room_uid")
+        .with(WebSocket::new(
+            |req: tide::Request<State>, mut wsc: WebSocketConnection| async move {
+                let user_uid = get_user_uid_from_cookie(&req).await;
+                let room_uid = req.param("room_uid").unwrap();
+
+                if let Some(user_uid) = &user_uid {
+                    let mut rooms = req.state().rooms.lock().await;
+                    rooms
+                        .entry(room_uid.to_string())
+                        .or_insert_with(HashMap::new)
+                        .insert(user_uid.clone(), wsc.clone());
+                }
+
+                while let Some(Ok(message)) = wsc.next().await {
+                    if let tide_websockets::Message::Text(text) = message {
+                        let message: WSMessage = serde_json::from_str(&text).unwrap();
+                        let _ = handle_websocket_message(
+                            req.state().clone(),
+                            room_uid.to_string(),
+                            user_uid.clone(),
+                            message,
+                        )
+                        .await;
+                    }
+                }
+
+                Ok(())
+            },
+        ))
+        .get(|_| async move { Ok("this was not a websocket request") });
+
     app.listen("127.0.0.1:3632").await?;
+
+    Ok(())
+}
+
+async fn handle_websocket_message(
+    state: State,
+    room_uid: String,
+    user_uid: Option<String>,
+    msg: WSMessage,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let user_uid = user_uid.unwrap();
+
+    match msg.message_type.as_str() {
+        "editSchedule" => {
+            let user_schedule: Vec<Vec<bool>> =
+                serde_json::from_value(msg.payload["user_schedule"].clone())?;
+
+            let user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
+
+            #[derive(Debug, Serialize, Deserialize)]
+            struct EditRoomReq {
+                user_schedule: Vec<Vec<bool>>,
+            }
+
+            #[derive(Debug, Serialize, Deserialize)]
+            struct EditRoomRes {
+                user_schedule: Vec<Vec<bool>>,
+                others_schedule: Vec<Vec<Vec<String>>>,
+                users: Vec<String>,
+            }
+
+            // If user isn't in room add them
+            let _ = sqlx::query!(
+                r#"
+                    INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner)
+                    VALUES (?, ?, ?, ?);
+                    "#,
+                user_uid,
+                room_uid,
+                user_name,
+                false
+            )
+            .execute(&state.db_pool)
+            .await;
+
+            // get schedule as in DB
+            let room = sqlx::query!(
+                r#"
+                    SELECT * FROM rooms
+                    WHERE uid=?
+                    "#,
+                room_uid
+            )
+            .fetch_one(&state.db_pool)
+            .await?;
+
+            // update schedule
+            let mut schedule: Vec<Vec<Vec<String>>> =
+                serde_json::from_str(&room.schedule.unwrap())?;
+
+            let (_, mut others_schedule) = seperate_users_schedule(schedule, user_uid.clone());
+
+            schedule = others_schedule
+                .iter_mut()
+                .enumerate()
+                .map(|(i, row)| {
+                    row.iter_mut()
+                        .enumerate()
+                        .map(|(j, slot)| {
+                            if user_schedule[i][j] {
+                                slot.push(user_uid.clone());
+                            }
+                            (*slot).clone()
+                        })
+                        .collect()
+                })
+                .collect();
+
+            // let others_schedule_json = json!(others_schedule);
+
+            // save new schedule
+
+            let _ = sqlx::query!(
+                r#"
+                    UPDATE rooms 
+                    SET schedule=?
+                    WHERE uid=?
+                    "#,
+                json!(schedule),
+                room_uid,
+            )
+            .execute(&state.db_pool)
+            .await;
+
+            for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
+            {
+                let (_, this_others_schedule) =
+                    seperate_users_schedule(schedule.clone(), this_user_uid.to_string());
+
+                let _ = user_wsc
+                    .send_json(&WSMessage {
+                        message_type: String::from("editSchedule"),
+                        payload: this_others_schedule.into(),
+                    })
+                    .await;
+            }
+        }
+        "editEventName" => {
+            #[derive(Serialize, Deserialize)]
+            struct EditEventNamePayload {
+                name: String,
+            }
+            let event_name_payload: EditEventNamePayload =
+                serde_json::from_value(msg.payload).unwrap();
+
+            let user_of_room: UserOfRoom = sqlx::query_as(
+                r#"
+                SELECT * FROM users_of_rooms
+                WHERE user_uid=? AND room_uid=?
+                "#,
+            )
+            .bind(user_uid.clone())
+            .bind(room_uid.clone())
+            .fetch_one(&state.db_pool)
+            .await?;
+
+            if user_of_room.is_owner {
+                sqlx::query(
+                    r#"
+                    UPDATE rooms
+                    SET event_name=?
+                    WHERE uid=?;
+                    "#,
+                )
+                .bind(event_name_payload.name.clone())
+                .bind(room_uid.clone())
+                .execute(&state.db_pool)
+                .await?;
+
+                // #[derive(Serialize, Deserialize)]
+                // struct EditEventNamePingPayload {
+                //     name: String,
+                // }
+
+                #[derive(Serialize, Deserialize)]
+                struct EditEventNamePing {
+                    message_type: String,
+                    payload: String,
+                }
+
+                for (this_user_uid, user_wsc) in
+                    state.rooms.lock().await.get(&room_uid).unwrap().iter()
+                {
+                    if *this_user_uid != user_uid {
+                        let _ = user_wsc
+                            .send_json(&EditEventNamePing {
+                                message_type: "editEventName".to_string(),
+                                payload: event_name_payload.name.to_string(),
+                            })
+                            .await;
+                    }
+                }
+            }
+        }
+        "editUserName" => {
+            #[derive(Debug, Serialize, Deserialize)]
+            struct EditUserNamePayload {
+                name: String,
+            }
+            let user_name_payload: EditUserNamePayload =
+                serde_json::from_value(msg.payload).unwrap();
+
+            let res = sqlx::query(
+                r#"
+                UPDATE users_of_rooms
+                SET name=?
+                WHERE user_uid=? AND room_uid=? 
+                "#,
+            )
+            .bind(user_name_payload.name)
+            .bind(user_uid.clone())
+            .bind(room_uid.clone())
+            .execute(&state.db_pool)
+            .await?;
+
+            let users_of_rooms = sqlx::query_as::<_, UserOfRoom>(
+                r#"
+                SELECT * FROM users_of_rooms
+                WHERE room_uid=?
+                "#,
+            )
+            .bind(room_uid.clone())
+            .fetch_all(&state.db_pool)
+            .await?;
+
+            #[derive(Serialize, Deserialize)]
+            struct EditUserNamePing {
+                message_type: String,
+                payload: Vec<String>,
+            }
+
+            for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
+            {
+                if *this_user_uid != user_uid {
+                    let others_names: Vec<String> = users_of_rooms.clone().into_iter().fold(
+                        Vec::new(),
+                        |mut others_names, user| {
+                            if user.user_uid != *this_user_uid {
+                                others_names.push(user.name);
+                            }
+                            others_names
+                        },
+                    );
+
+                    let _ = user_wsc
+                        .send_json(&EditUserNamePing {
+                            message_type: "editUserName".to_string(),
+                            payload: others_names,
+                        })
+                        .await;
+                }
+            }
+        }
+        _ => return Err("Unknown message_type".into()),
+    };
 
     Ok(())
 }
@@ -110,38 +380,10 @@ fn seperate_users_schedule(
     (user_schedule, others_schedule)
 }
 
-async fn edit_room_event_name(mut req: Request<State>) -> tide::Result {
-    let mut user_uid: Option<String> = get_user_uid_from_cookie(&req).await;
-
-    Ok(Response::new(StatusCode::Ok))
-}
-
-async fn edit_room_user_name(mut req: Request<State>) -> tide::Result {
-    Ok(Response::new(StatusCode::Ok))
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct EditRoomReq {
-    user_schedule: Vec<Vec<bool>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct EditRoomRes {
-    user_schedule: Vec<Vec<bool>>,
-    others_schedule: Vec<Vec<Vec<String>>>,
-    users: Vec<String>,
-}
-
-async fn edit_room(mut req: Request<State>) -> tide::Result {
-    let room_uid: String = req.param("slug")?.to_string();
+async fn authenticate(req: Request<State>) -> tide::Result {
     let mut response = Response::new(StatusCode::Ok);
 
-    let req_body: EditRoomReq = req.body_json().await.unwrap_or_else(|_e| {
-        panic!();
-    });
-
-    // get current user
-    let mut user_uid: Option<String> = get_user_uid_from_cookie(&req).await;
+    let mut user_uid = get_user_uid_from_cookie(&req).await;
 
     if user_uid == None {
         match signup(req.state().db_pool.clone()).await {
@@ -156,91 +398,12 @@ async fn edit_room(mut req: Request<State>) -> tide::Result {
         }
     }
 
-    let user_uid: String = user_uid.unwrap();
-
-    // get schedule as in DB
-    let room = sqlx::query!(
-        r#"
-        SELECT * FROM rooms
-        WHERE uid=?
-        "#,
-        room_uid
-    )
-    .fetch_one(&req.state().db_pool)
-    .await?;
-
-    // update schedule
-    let mut schedule: Vec<Vec<Vec<String>>> = serde_json::from_str(&room.schedule.unwrap())?;
-
-    let (_, mut others_schedule) = seperate_users_schedule(schedule, user_uid.clone());
-
-    schedule = others_schedule
-        .iter_mut()
-        .enumerate()
-        .map(|(i, row)| {
-            row.iter_mut()
-                .enumerate()
-                .map(|(j, slot)| {
-                    if req_body.user_schedule[i][j] {
-                        slot.push(user_uid.clone());
-                    }
-                    (*slot).clone()
-                })
-                .collect()
-        })
-        .collect();
-
-    // let others_schedule_json = json!(others_schedule);
-
-    // save new schedule
-
-    let _ = match sqlx::query!(
-        r#"
-        UPDATE rooms 
-        SET schedule=?
-        WHERE uid=?
-        "#,
-        json!(schedule),
-        room_uid,
-    )
-    .execute(&req.state().db_pool)
-    .await
-    {
-        Ok(_) => response.set_body(json!({
-            "room_uid": room_uid
-        })),
-        Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
-    };
-
-    // If user isn't in room add them
-    let _ = sqlx::query!(
-        r#"
-            INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner)
-            VALUES (?, ?, ?, ?);
-        "#,
-        user_uid,
-        room_uid,
-        "Jeff",
-        false
-    )
-    .execute(&req.state().db_pool)
-    .await;
-
-    // return
-    let response_body = EditRoomRes {
-        user_schedule: req_body.user_schedule,
-        others_schedule,
-        users: Vec::new(),
-    };
-
-    let response_body_string = serde_json::to_string(&response_body)?;
-    response.set_body(response_body_string);
-
     Ok(response)
 }
 
 async fn get_room(req: Request<State>) -> tide::Result {
-    let room_uid: String = req.param("slug")?.to_string();
+    let room_uid: String = req.param("room_uid")?.to_string();
+
     let mut response = Response::new(StatusCode::Ok);
 
     let room = sqlx::query!(
@@ -270,17 +433,19 @@ async fn get_room(req: Request<State>) -> tide::Result {
     .fetch_all(&req.state().db_pool)
     .await?;
 
-    let (is_owner, others_names): (bool, Vec<String>) = users_of_rooms.into_iter().fold(
-        (false, Vec::new()),
-        |(mut is_owner, mut others_names), user| {
-            if user.user_uid == user_uid {
-                is_owner = user.is_owner;
-            } else {
-                others_names.push(user.name);
-            }
-            (is_owner, others_names)
-        },
-    );
+    let (is_owner, user_name, others_names): (bool, String, Vec<String>) =
+        users_of_rooms.into_iter().fold(
+            (false, String::new(), Vec::new()),
+            |(mut is_owner, mut user_name, mut others_names), user| {
+                if user.user_uid == user_uid {
+                    user_name = user.name;
+                    is_owner = user.is_owner;
+                } else {
+                    others_names.push(user.name);
+                }
+                (is_owner, user_name, others_names)
+            },
+        );
 
     let response_body = GetRoomRes {
         event_name: room.event_name.unwrap(),
@@ -289,6 +454,7 @@ async fn get_room(req: Request<State>) -> tide::Result {
         user_schedule,
         others_schedule,
         others_names,
+        user_name,
         time_range: TimeRange {
             from_hour: room.time_min.unwrap(),
             to_hour: room.time_max.unwrap(),
@@ -318,6 +484,7 @@ struct GetRoomRes {
     slot_length: u8,
     user_schedule: Vec<Vec<bool>>,
     others_schedule: Vec<Vec<Vec<String>>>,
+    user_name: String,
     others_names: Vec<String>,
     time_range: TimeRange,
     is_owner: bool,
@@ -477,48 +644,4 @@ async fn signup(pool: Pool<MySql>) -> Result<(SignupResult, Cookie<'static>), sq
         }
         Err(err) => return Err(err),
     }
-}
-
-fn generate_auth_token() -> String {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_millis();
-
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{}{}", timestamp, Uuid::new_v4()));
-    let hash = hasher.finalize();
-    format!("{:x}", hash)
-}
-
-fn generate_id(ip: &str, len: usize) -> String {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_millis();
-
-    let mut hasher = Sha256::new();
-    hasher.update(format!("{}{}", timestamp, ip));
-    let hash = hasher.finalize();
-
-    const BASE36_CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    let mut id = String::new();
-    let mut num = BigUint::from_bytes_be(&hash);
-
-    while num > BigUint::ZERO {
-        let (new_num, remainder) = (
-            num.clone().div(&BigUint::from(36u32)),
-            num.clone().rem(&BigUint::from(36u32)),
-        );
-        let rem_u32 = BigUint::to_u32_digits(&remainder);
-        if !rem_u32.is_empty() {
-            let digit = BASE36_CHARS[rem_u32[0] as usize];
-            id.insert(0, digit as char);
-        }
-
-        num = new_num;
-    }
-
-    id[..len].to_string()
 }
