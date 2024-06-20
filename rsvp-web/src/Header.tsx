@@ -2,13 +2,15 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCalendarCheck } from '@fortawesome/free-solid-svg-icons'
 
 const Header = () => (
-  <header>
-    <a
-      href="/"
-      className="flex flex-row gap-4 items-center text-primary font-bold hover:text-primary/90 "
-    >
-      <FontAwesomeIcon icon={faCalendarCheck} size="xl" />
-      <h1 className="text-xl">C'mon, RSVP!</h1>
+  <header className="flex flex-row items-center text-primary font-bold hover:text-primary/90 ">
+    <a href="/" className="flex flex-row gap-x-4 items-center">
+      <FontAwesomeIcon icon={faCalendarCheck} size="2xl" />
+      <div className="flex flex-col">
+        <h1 className="text-xl">C'mon, RSVP!</h1>
+        <h2 className="font-medium text-sm mt-[-4px]">
+          Find a time that's convenient for everyone
+        </h2>
+      </div>
     </a>
   </header>
 )

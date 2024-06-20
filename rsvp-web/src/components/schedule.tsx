@@ -13,11 +13,13 @@ const CELL_HEIGHT = 16
 const Schedule = ({
   data,
   setData,
-  isCreate
+  isCreate,
+  hoveringUser
 }: {
   data: ScheduleData
   setData: React.Dispatch<ScheduleData>
   isCreate: boolean
+  hoveringUser: null | number
 }) => {
   const timeDifference =
     (Number(data.timeRange.to.hour) +
@@ -110,7 +112,7 @@ const Schedule = ({
     date: Date
     dateIndex: number
     dayUser: boolean[]
-    dayOthers: string[][]
+    dayOthers: number[][]
   }) => {
     return (
       <div className="flex flex-grow">
@@ -152,7 +154,7 @@ const Schedule = ({
     dateIndex
   }: {
     userValue: boolean
-    othersValue: string[]
+    othersValue: number[]
     timeIndex: number
     dateIndex: number
   }) => {
@@ -184,6 +186,8 @@ const Schedule = ({
     const otherColor = tinycolor(`hsl(${Colors.dark.secondary})`)
 
     let bg_color: tinycolor.Instance
+    let alpha = hoveringUser === null ? 1 : 0.5
+
     if ((isCurrentlySelected || isCellSelected) && othersValue?.length > 0) {
       bg_color = tinycolor
         .mix(userColor, otherColor, 60)
@@ -197,11 +201,15 @@ const Schedule = ({
       bg_color = tinycolor(`hsl(${Colors.dark.background})`)
     }
 
-    if (isCurrentlySelected) {
-      bg_color.lighten(15)
-    }
+    if (isCurrentlySelected) bg_color.lighten(15)
 
-    let bg_color_string = bg_color.toHexString()
+    if (
+      (hoveringUser !== null && othersValue.includes(hoveringUser - 1)) ||
+      (hoveringUser === 0 && isCellSelected)
+    )
+      alpha = 1
+
+    let bg_color_string = bg_color.toHex8String()
 
     return (
       <div
@@ -237,9 +245,9 @@ const Schedule = ({
         }}
       >
         <div
-          className={`rounded w-full h-full`}
-          style={{ backgroundColor: bg_color_string }}
-        />
+          className={`rounded w-full h-full text-xs`}
+          style={{ backgroundColor: bg_color_string, opacity: alpha }}
+        ></div>
       </div>
     )
   }

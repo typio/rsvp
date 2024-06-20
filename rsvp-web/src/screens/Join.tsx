@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 import Schedule from '.././components/schedule'
-import { h24ToTimeRange} from '@/utils'
+import { h24ToTimeRange } from '@/utils'
 import { ScheduleData } from '@/types'
 
 const Join = () => {
@@ -82,6 +82,7 @@ const Join = () => {
   const [userName, setUserName] = useState<String>('')
   const [others, setOthers] = useState<String[]>([])
   const [isOwner, setIsOwner] = useState(false)
+  const [hoveringUser, setHoveringUser] = useState<null | number>(null)
 
   const authenticate = async (): Promise<boolean> => {
     let result = await fetch(`http://localhost:3632/api/auth`, {
@@ -231,17 +232,35 @@ const Join = () => {
 
         <div className="flex flex-row justify-between">
           <div className="flex flex-row gap-x-2 items-center">
-            You <div className="w-3 h-3 rounded bg-primary" />
+            <div
+              className={`opacity-${hoveringUser != null && hoveringUser != 0 ? '50' : '100'}`}
+              onMouseEnter={() => setHoveringUser(0)}
+              onMouseLeave={() => setHoveringUser(null)}
+            >
+              You
+            </div>
+            <div
+              className={`w-3 h-3 rounded bg-primary opacity-${hoveringUser != null && hoveringUser != 0 ? '50' : '100'}`}
+            />
           </div>
 
           {others?.length > 0 && (
             <div className="flex flex-row gap-x-2 items-center">
               <div className="flex flex-row gap-x-4 items-center">
                 {others?.map((user: string, i) => (
-                  <div key={i}>{user?.length > 0 ? user : `User ${i}`}</div>
+                  <div
+                    key={i}
+                    className={`opacity-${hoveringUser != null && hoveringUser != i + 1 ? '50' : '100'}`}
+                    onMouseEnter={() => setHoveringUser(i + 1)}
+                    onMouseLeave={() => setHoveringUser(null)}
+                  >
+                    {user?.length > 0 ? user : `User ${i}`}
+                  </div>
                 ))}
               </div>
-              <div className="w-3 h-3 rounded bg-secondary" />
+              <div
+                className={`w-3 h-3 rounded bg-secondary opacity-${hoveringUser != null && hoveringUser == 0 ? '50' : '100'}`}
+              />
             </div>
           )}
         </div>
@@ -251,6 +270,7 @@ const Join = () => {
             data={scheduleData}
             setData={setScheduleData}
             isCreate={false}
+            hoveringUser={hoveringUser}
           />
         )}
 

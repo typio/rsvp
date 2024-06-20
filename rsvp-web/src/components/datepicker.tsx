@@ -11,6 +11,7 @@ import {
   PopoverTrigger
 } from '@/components/ui/popover'
 import { toast } from 'sonner'
+import { isSameDay, set } from 'date-fns'
 
 export const DatePickerMultiple = ({
   dates,
@@ -23,7 +24,7 @@ export const DatePickerMultiple = ({
 }) => {
   const trySetDates = (newDates: Date[] | undefined, nD: Date) => {
     newDates
-    if (!(dates ?? []).some(e => e.getTime() === nD.getTime())) {
+    if (!(dates ?? []).some(day => isSameDay(day, nD))) {
       if ((dates ?? []).length >= 14)
         toast.error('You must become a Pro member to select 2+ weeks!', {
           description: 'Pro subscriptions are not available.',
@@ -37,7 +38,7 @@ export const DatePickerMultiple = ({
           [...(dates ?? []), nD].sort((a, b) => a.getTime() - b.getTime())
         )
     } else {
-      setDates(dates?.filter(e => e.getTime() !== nD.getTime()) || [])
+      setDates(dates?.filter(day => !isSameDay(day, nD)) || [])
     }
   }
 

@@ -149,7 +149,7 @@ async fn handle_websocket_message(
             #[derive(Debug, Serialize, Deserialize)]
             struct EditRoomRes {
                 user_schedule: Vec<Vec<bool>>,
-                others_schedule: Vec<Vec<Vec<String>>>,
+                others_schedule: Vec<Vec<Vec<u32>>>,
                 users: Vec<String>,
             }
 
@@ -191,7 +191,7 @@ async fn handle_websocket_message(
                     row.iter_mut()
                         .enumerate()
                         .map(|(j, slot)| {
-                            if user_schedule[i][j] {
+                            if user_schedule[i][j] == true {
                                 slot.push(user_uid.clone());
                             }
                             (*slot).clone()
@@ -200,10 +200,7 @@ async fn handle_websocket_message(
                 })
                 .collect();
 
-            // let others_schedule_json = json!(others_schedule);
-
             // save new schedule
-
             let _ = sqlx::query!(
                 r#"
                     UPDATE rooms 
@@ -216,15 +213,50 @@ async fn handle_websocket_message(
             .execute(&state.db_pool)
             .await;
 
+            // get users
+            let users_of_room: Vec<(String,)> = sqlx::query_as(
+                r#"
+                SELECT user_uid FROM users_of_rooms
+                WHERE room_uid=?
+                "#,
+            )
+            .bind(room_uid.clone())
+            .fetch_all(&state.db_pool)
+            .await?;
+
             for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
             {
+                let mut other_users_indices_dict = HashMap::new();
+                let mut other_users_index = 0;
+                for user in users_of_room.iter() {
+                    if user.0 != *this_user_uid {
+                        other_users_indices_dict.insert(user.0.clone(), other_users_index);
+                        other_users_index += 1;
+                    }
+                }
+
                 let (_, this_others_schedule) =
                     seperate_users_schedule(schedule.clone(), this_user_uid.to_string());
+
+                let this_others_schedule_indices: Vec<Vec<Vec<usize>>> = this_others_schedule
+                    .iter()
+                    .map(|day| {
+                        (*day)
+                            .iter()
+                            .map(|slot| {
+                                (*slot)
+                                    .iter()
+                                    .map(|uid| *other_users_indices_dict.get(uid).unwrap())
+                                    .collect()
+                            })
+                            .collect()
+                    })
+                    .collect();
 
                 let _ = user_wsc
                     .send_json(&WSMessage {
                         message_type: String::from("editSchedule"),
-                        payload: this_others_schedule.into(),
+                        payload: this_others_schedule_indices.into(),
                     })
                     .await;
             }
@@ -401,6 +433,19 @@ async fn authenticate(req: Request<State>) -> tide::Result {
     Ok(response)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct GetRoomRes {
+    event_name: String,
+    dates: Vec<String>,
+    slot_length: u8,
+    user_schedule: Vec<Vec<bool>>,
+    others_schedule: Vec<Vec<Vec<usize>>>,
+    user_name: String,
+    others_names: Vec<String>,
+    time_range: TimeRange,
+    is_owner: bool,
+}
+
 async fn get_room(req: Request<State>) -> tide::Result {
     let room_uid: String = req.param("room_uid")?.to_string();
 
@@ -433,8 +478,11 @@ async fn get_room(req: Request<State>) -> tide::Result {
     .fetch_all(&req.state().db_pool)
     .await?;
 
+    let mut user_index_dict = HashMap::new();
+    let mut users_fold_index = 0;
+
     let (is_owner, user_name, others_names): (bool, String, Vec<String>) =
-        users_of_rooms.into_iter().fold(
+        users_of_rooms.clone().into_iter().fold(
             (false, String::new(), Vec::new()),
             |(mut is_owner, mut user_name, mut others_names), user| {
                 if user.user_uid == user_uid {
@@ -442,17 +490,39 @@ async fn get_room(req: Request<State>) -> tide::Result {
                     is_owner = user.is_owner;
                 } else {
                     others_names.push(user.name);
+                    user_index_dict.insert(user_name.clone(), users_fold_index);
                 }
+                users_fold_index += 1;
+
                 (is_owner, user_name, others_names)
             },
         );
+
+    for (user_i, user) in users_of_rooms.iter().enumerate() {
+        user_index_dict.insert(user.user_uid.clone(), user_i);
+    }
+
+    let others_schedule_indices: Vec<Vec<Vec<usize>>> = others_schedule
+        .iter()
+        .map(|day| {
+            (*day)
+                .iter()
+                .map(|slot| {
+                    (*slot)
+                        .iter()
+                        .map(|uid| *user_index_dict.get(uid).unwrap())
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
 
     let response_body = GetRoomRes {
         event_name: room.event_name.unwrap(),
         dates: serde_json::from_str(&room.dates.unwrap())?,
         slot_length: room.slot_length.unwrap(),
         user_schedule,
-        others_schedule,
+        others_schedule: others_schedule_indices,
         others_names,
         user_name,
         time_range: TimeRange {
@@ -475,19 +545,6 @@ struct CreateRoomReq {
     slot_length: u8,
     schedule: Vec<Vec<bool>>,
     time_range: TimeRange,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GetRoomRes {
-    event_name: String,
-    dates: Vec<String>,
-    slot_length: u8,
-    user_schedule: Vec<Vec<bool>>,
-    others_schedule: Vec<Vec<Vec<String>>>,
-    user_name: String,
-    others_names: Vec<String>,
-    time_range: TimeRange,
-    is_owner: bool,
 }
 
 async fn create_room(mut req: Request<State>) -> tide::Result {
