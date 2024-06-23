@@ -10,7 +10,8 @@ module.exports = {
   prefix: '',
   theme: {
     fontFamily: {
-      sans: ['Lato', 'sans-serif']
+      sans: ['Poppins', 'Lato', 'sans-serif'],
+      time: ['Chivo Mono', 'monospace']
     },
 
     container: {},
@@ -64,11 +65,15 @@ module.exports = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' }
         },
-
         delayedFadeIn: {
           '0%': { opacity: 0 },
           '50%': { opacity: 0 },
           '100%': { opacity: 1 }
+        },
+        pulse: {
+          '50%': {
+            transform: 'scale(0.5)'
+          }
         }
       },
       animation: {

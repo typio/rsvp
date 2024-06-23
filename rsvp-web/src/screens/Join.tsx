@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import useWebSocket, { ReadyState } from 'react-use-websocket'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faShare } from '@fortawesome/free-solid-svg-icons'
+import { faShare, faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,71 +11,66 @@ import Schedule from '.././components/schedule'
 import { h24ToTimeRange } from '@/utils'
 import { ScheduleData } from '@/types'
 
-const Join = () => {
+const Join = ({ setIsCreate, setWSMode }) => {
   const room_uid = window.location.pathname.slice(1)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<null | string>(null)
   const [isInitialRender, setIsInitialRender] = useState(true)
 
-  const [socket, setSocket] = useState<WebSocket | null>(null)
+  const [socketUrl, setSocketUrl] = useState<null | string>(null)
+  const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl, {
+    shouldReconnect: () => true
+  })
 
-  const handleWebSocketMessage = (message: {
-    message_type: string
-    payload: any
-  }) => {
-    switch (message.message_type) {
-      case 'editEventName':
-        setScheduleData(p => ({
-          ...p,
-          eventName: message.payload
-        }))
-        break
-      case 'editUserName':
-        setOthers(message.payload)
-        break
-      case 'editSchedule':
-        setScheduleData(p => ({
-          ...p,
-          othersSchedule: message.payload
-        }))
-        break
-      default:
-        console.log('Unknown WebSocket message:', message)
+  useEffect(() => {
+    if (lastMessage !== null) {
+      let message = JSON.parse(lastMessage.data)
+
+      switch (message.message_type) {
+        case 'editEventName':
+          setScheduleData(p => ({
+            ...p,
+            eventName: message.payload
+          }))
+          break
+        case 'editUserName':
+          setOthers(message.payload)
+          break
+        case 'editSchedule':
+          setScheduleData(p => ({
+            ...p,
+            othersSchedule: message.payload
+          }))
+          break
+        default:
+          console.log('Unknown WebSocket message:', message)
+      }
     }
-  }
+  }, [lastMessage])
+
+  const connectionStatus = {
+    [ReadyState.CONNECTING]: 'Connecting',
+    [ReadyState.OPEN]: 'Open',
+    [ReadyState.CLOSING]: 'Closing',
+    [ReadyState.CLOSED]: 'Closed',
+    [ReadyState.UNINSTANTIATED]: 'Uninstantiated'
+  }[readyState]
+
+  useEffect(() => {
+    setWSMode(connectionStatus)
+  }, [connectionStatus])
 
   useEffect(() => {
     if (isInitialRender) {
       authenticate().then(auth_success => {
         if (auth_success) {
-          const newSocket = new WebSocket(
-            `ws://localhost:3632/api/ws/${room_uid}`
-          )
-          setSocket(newSocket)
-
-          newSocket.onopen = () => {
-            console.log('WebSocket connection established')
-          }
-
-          newSocket.onmessage = event => {
-            const message = JSON.parse(event.data)
-            handleWebSocketMessage(message)
-          }
-
-          newSocket.onclose = () => {
-            console.log('WebSocket connection closed')
-          }
+          setSocketUrl(`ws://localhost:3632/api/ws/${room_uid}`)
         } else return
       })
 
       getRoom()
       setIsInitialRender(false)
-      return
-    }
-
-    return () => {
-      socket?.close()
     }
   }, [])
 
@@ -121,10 +117,27 @@ const Join = () => {
     setLoading(false)
   }, [])
 
-  useEffect(() => {
-    if (loading || !socket || socket.readyState != socket.OPEN) return
+  const deleteRoom = () => {
+    try {
+      fetch(`http://localhost:3632/api/rooms/${room_uid}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      }).then(res => {
+        if (res.ok) {
+          history.pushState({ page: 1 }, 'room', '/')
+          setIsCreate(true)
+        }
+      })
+    } catch (e) {
+      setError(String(e))
+    }
+  }
 
-    socket.send(
+  useEffect(() => {
+    // if (loading || !socket || socket.readyState != socket.OPEN) return
+
+    sendMessage(
+      // socket.send(
       JSON.stringify({
         message_type: 'editSchedule',
         payload: {
@@ -186,15 +199,14 @@ const Join = () => {
                   onChange={e => {
                     const value = e.target.value
                     setScheduleData(p => ({ ...p, eventName: value }))
-                    if (socket && socket.readyState == socket.OPEN)
-                      socket.send(
-                        JSON.stringify({
-                          message_type: 'editEventName',
-                          payload: {
-                            name: value
-                          }
-                        })
-                      )
+                    sendMessage(
+                      JSON.stringify({
+                        message_type: 'editEventName',
+                        payload: {
+                          name: value
+                        }
+                      })
+                    )
                   }}
                 />
               </div>
@@ -202,8 +214,12 @@ const Join = () => {
               <div className="mb-2 text-lg">{scheduleData?.eventName}</div>
             )}
 
-            <Button onClick={shareRoom} className="ml-auto">
-              <FontAwesomeIcon icon={faShare} />
+            <Button
+              onClick={shareRoom}
+              className="flex flex-row ml-auto gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
+            >
+              <FontAwesomeIcon icon={faSquareUpRight} />
+              Share
             </Button>
           </div>
 
@@ -216,15 +232,15 @@ const Join = () => {
               onChange={e => {
                 const value = e.target.value
                 setUserName(value)
-                if (socket && socket.readyState == socket.OPEN)
-                  socket.send(
-                    JSON.stringify({
-                      message_type: 'editUserName',
-                      payload: {
-                        name: value
-                      }
-                    })
-                  )
+
+                sendMessage(
+                  JSON.stringify({
+                    message_type: 'editUserName',
+                    payload: {
+                      name: value
+                    }
+                  })
+                )
               }}
             />
           </div>
@@ -276,14 +292,15 @@ const Join = () => {
 
         {/* TODO: Show drop down asking to confirm delete and one for asking reason (e.g. No times work, I'm not coming, Custom, etc...) */}
         {isOwner ? (
-          <Button className="bg-red-600 hover:bg-red-700 mt-4">
-            <span className="text-destructive-foreground">Delete Event</span>
+          <Button
+            className="bg-muted text-destructive hover:bg-destructive hover:text-destructive-foreground mt-4"
+            onClick={deleteRoom}
+          >
+            Delete Event
           </Button>
         ) : (
-          <Button className="bg-red-600 hover:bg-red-700 mt-4">
-            <span className="text-destructive-foreground">
-              I can't make it.
-            </span>
+          <Button className="bg-muted text-destructive hover:bg-destructive hover:text-destructive-foreground mt-4">
+            I can't make it.
           </Button>
         )}
       </div>

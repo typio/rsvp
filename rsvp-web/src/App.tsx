@@ -8,6 +8,7 @@ const IsCreateContext = createContext<any>(null)
 
 const App = () => {
   const [isCreate, setIsCreate] = useState(window.location.pathname === '/')
+  const [WSMode, setWSMode] = useState(null)
 
   window.addEventListener('pushState', () => {
     if (window.location.pathname === '/') setIsCreate(true)
@@ -19,9 +20,13 @@ const App = () => {
       <div className="py-8 px-8 min-h-[100vh] grid grid-rows-[auto_1fr_auto] gap-y-8">
         <Header />
         <IsCreateContext.Provider value={isCreate}>
-          {isCreate ? <Create setIsCreate={setIsCreate}/> : <Join />}
+          {isCreate ? (
+            <Create setIsCreate={setIsCreate} />
+          ) : (
+            <Join setIsCreate={setIsCreate} setWSMode={setWSMode} />
+          )}
         </IsCreateContext.Provider>
-        <Footer />
+        <Footer isCreate={isCreate} WSMode={WSMode} />
       </div>
     </>
   )

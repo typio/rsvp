@@ -5,8 +5,11 @@ use utils::{generate_auth_token, generate_id};
 
 use async_std::prelude::*;
 use async_std::sync::Mutex;
+use async_std::task;
 use core::panic;
 use dotenv::dotenv;
+use futures::select;
+use futures::FutureExt;
 use serde::Deserialize;
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::mysql::MySqlPool;
@@ -16,7 +19,6 @@ use std::collections::HashMap;
 use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
-use tide::http::headers::HeaderValue;
 use tide::http::Cookie;
 use tide::prelude::*;
 use tide::security::CorsMiddleware;
@@ -57,6 +59,19 @@ struct UserOfRoom {
     is_owner: bool,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct Room {
+    uid: String,
+    event_name: String,
+    dates: String,
+    day_count: u8,
+    time_min: u8,
+    time_max: u8,
+    slot_length: u8,
+    schedule: String,
+    expires_at: time_new::OffsetDateTime,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct TimeRange {
     from_hour: u8,
@@ -79,7 +94,6 @@ async fn main() -> tide::Result<()> {
     let mut app = tide::with_state(State::new(pool));
 
     let cors = CorsMiddleware::new()
-        .allow_methods("GET, POST, PATCH".parse::<HeaderValue>().unwrap())
         .allow_origin(Origin::from("http://localhost:5173"))
         .allow_credentials(true);
 
@@ -88,6 +102,7 @@ async fn main() -> tide::Result<()> {
     app.at("/api/auth").post(authenticate);
     app.at("/api/rooms").post(create_room);
     app.at("/api/rooms/:room_uid").get(get_room);
+    app.at("/api/delete/:room_uid").post(delete_room);
 
     app.at("/api/ws/:room_uid")
         .with(WebSocket::new(
@@ -95,6 +110,7 @@ async fn main() -> tide::Result<()> {
                 let user_uid = get_user_uid_from_cookie(&req).await;
                 let room_uid = req.param("room_uid").unwrap();
 
+                // Add connection
                 if let Some(user_uid) = &user_uid {
                     let mut rooms = req.state().rooms.lock().await;
                     rooms
@@ -103,16 +119,60 @@ async fn main() -> tide::Result<()> {
                         .insert(user_uid.clone(), wsc.clone());
                 }
 
-                while let Some(Ok(message)) = wsc.next().await {
-                    if let tide_websockets::Message::Text(text) = message {
-                        let message: WSMessage = serde_json::from_str(&text).unwrap();
-                        let _ = handle_websocket_message(
-                            req.state().clone(),
-                            room_uid.to_string(),
-                            user_uid.clone(),
-                            message,
-                        )
-                        .await;
+                let ping_interval = std::time::Duration::from_secs(100);
+                let mut interval = async_std::stream::interval(ping_interval);
+
+                loop {
+                    select! {
+                        _ = interval.next().fuse() => {
+                            if let Err(_) = wsc.send(tide_websockets::Message::Ping(vec![])).await {
+                                break;
+                            }
+                        },
+                        message = wsc.next().fuse() => {
+                            if let Some(Ok(message)) = message {
+                                match message {
+                                    tide_websockets::Message::Text(text) => {
+                                        let message: WSMessage = serde_json::from_str(&text).unwrap();
+                                        let _ = handle_websocket_message(
+                                            req.state().clone(),
+                                            room_uid.to_string(),
+                                            user_uid.clone(),
+                                            message,
+                                        )
+                                        .await;
+                                    },
+                                    tide_websockets::Message::Pong(_) => {
+                                        if let Some(user_uid) = &user_uid {
+                                            println!("Pong from {}", user_uid);
+                                        }
+                                    },
+                                    tide_websockets::Message::Ping(payload) => {
+                                        if let Some(user_uid) = &user_uid {
+                                            println!("Ping from {}", user_uid);
+                                        if let Err(_) = wsc.send(tide_websockets::Message::Pong(payload)).await {
+                                            break;
+                                        }
+                                        }
+                                    },
+                                    _ => {} // Handle other message types if needed
+                                }
+                            }
+                            else {
+                                break; // Connection closed
+                            }
+                        }
+                    }
+                }
+
+                // Remove connection
+                if let Some(user_uid) = &user_uid {
+                    let mut rooms = req.state().rooms.lock().await;
+                    if let Some(room) = rooms.get_mut(room_uid) {
+                        room.remove(user_uid);
+                        if room.is_empty() {
+                            rooms.remove(room_uid);
+                        }
                     }
                 }
 
@@ -168,21 +228,20 @@ async fn handle_websocket_message(
             .await;
 
             // get schedule as in DB
-            let room = sqlx::query!(
+            let room: Room = sqlx::query_as(
                 r#"
                     SELECT * FROM rooms
                     WHERE uid=?
                     "#,
-                room_uid
             )
+            .bind(&room_uid)
             .fetch_one(&state.db_pool)
             .await?;
 
             // update schedule
-            let mut schedule: Vec<Vec<Vec<String>>> =
-                serde_json::from_str(&room.schedule.unwrap())?;
+            let mut schedule: Vec<Vec<Vec<&str>>> = serde_json::from_str(&room.schedule)?;
 
-            let (_, mut others_schedule) = seperate_users_schedule(schedule, user_uid.clone());
+            let (_, mut others_schedule) = seperate_users_schedule(schedule, &user_uid);
 
             schedule = others_schedule
                 .iter_mut()
@@ -192,7 +251,7 @@ async fn handle_websocket_message(
                         .enumerate()
                         .map(|(j, slot)| {
                             if user_schedule[i][j] == true {
-                                slot.push(user_uid.clone());
+                                slot.push(&user_uid);
                             }
                             (*slot).clone()
                         })
@@ -213,50 +272,15 @@ async fn handle_websocket_message(
             .execute(&state.db_pool)
             .await;
 
-            // get users
-            let users_of_room: Vec<(String,)> = sqlx::query_as(
-                r#"
-                SELECT user_uid FROM users_of_rooms
-                WHERE room_uid=?
-                "#,
-            )
-            .bind(room_uid.clone())
-            .fetch_all(&state.db_pool)
-            .await?;
+            for (wsc_user_uid, wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter() {
+                let room_data = process_room_data(&state, &room_uid, &wsc_user_uid)
+                    .await
+                    .unwrap();
 
-            for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
-            {
-                let mut other_users_indices_dict = HashMap::new();
-                let mut other_users_index = 0;
-                for user in users_of_room.iter() {
-                    if user.0 != *this_user_uid {
-                        other_users_indices_dict.insert(user.0.clone(), other_users_index);
-                        other_users_index += 1;
-                    }
-                }
-
-                let (_, this_others_schedule) =
-                    seperate_users_schedule(schedule.clone(), this_user_uid.to_string());
-
-                let this_others_schedule_indices: Vec<Vec<Vec<usize>>> = this_others_schedule
-                    .iter()
-                    .map(|day| {
-                        (*day)
-                            .iter()
-                            .map(|slot| {
-                                (*slot)
-                                    .iter()
-                                    .map(|uid| *other_users_indices_dict.get(uid).unwrap())
-                                    .collect()
-                            })
-                            .collect()
-                    })
-                    .collect();
-
-                let _ = user_wsc
+                let _ = wsc
                     .send_json(&WSMessage {
                         message_type: String::from("editSchedule"),
-                        payload: this_others_schedule_indices.into(),
+                        payload: room_data.others_schedule.into(),
                     })
                     .await;
             }
@@ -292,11 +316,6 @@ async fn handle_websocket_message(
                 .bind(room_uid.clone())
                 .execute(&state.db_pool)
                 .await?;
-
-                // #[derive(Serialize, Deserialize)]
-                // struct EditEventNamePingPayload {
-                //     name: String,
-                // }
 
                 #[derive(Serialize, Deserialize)]
                 struct EditEventNamePing {
@@ -383,11 +402,120 @@ async fn handle_websocket_message(
     Ok(())
 }
 
-fn seperate_users_schedule(
-    schedule: Vec<Vec<Vec<String>>>,
-    user_uid: String,
-) -> (Vec<Vec<bool>>, Vec<Vec<Vec<String>>>) {
-    let (user_schedule, others_schedule): (Vec<Vec<bool>>, Vec<Vec<Vec<String>>>) = schedule
+fn get_sanitized_others(
+    others_schedule: Vec<Vec<Vec<&str>>>,
+    users_of_room: Vec<(&str, &str)>,
+    user_uid: &str,
+) -> (Vec<String>, Vec<Vec<Vec<usize>>>) {
+    let mut other_names = Vec::with_capacity(users_of_room.len() - 1);
+    let mut other_users_indices_dict = HashMap::new();
+    let mut other_users_index = 0;
+    for (some_uid, some_name) in users_of_room.iter() {
+        if *some_uid != user_uid {
+            other_users_indices_dict.insert(some_uid, other_users_index);
+            other_users_index += 1;
+
+            other_names.push(some_name.to_string());
+        }
+    }
+
+    (
+        other_names,
+        others_schedule
+            .iter()
+            .map(|day| {
+                (*day)
+                    .iter()
+                    .map(|slot| {
+                        (*slot)
+                            .iter()
+                            .map(|uid| {
+                                let idx = other_users_indices_dict.get(uid);
+                                let idx = idx.unwrap();
+                                *idx
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect(),
+    )
+}
+
+async fn process_room_data(
+    state: &State,
+    room_uid: &str,
+    user_uid: &str,
+) -> Result<GetRoomRes, Box<dyn std::error::Error>> {
+    let room: Room = sqlx::query_as(
+        r#"
+        SELECT * FROM rooms
+        WHERE uid=?
+        "#,
+    )
+    .bind(room_uid)
+    .fetch_one(&state.db_pool)
+    .await
+    .unwrap();
+
+    // Process schedule
+    let schedule: Vec<Vec<Vec<&str>>> = serde_json::from_str(&room.schedule)?;
+    let (user_schedule, others_schedule) = seperate_users_schedule(schedule, user_uid);
+
+    // get users
+    let users_of_room: Vec<(String, String)> = sqlx::query_as(
+        r#"
+        SELECT user_uid, name FROM users_of_rooms
+        WHERE room_uid=?
+        "#,
+    )
+    .bind(room_uid)
+    .fetch_all(&state.db_pool)
+    .await
+    .unwrap();
+
+    // User might not be in room yet (as in GET request), that's ok
+    let (user_name, is_owner): (String, bool) = sqlx::query_as(
+        r#"
+        SELECT name, is_owner FROM users_of_rooms
+        WHERE room_uid=? AND user_uid=?
+        "#,
+    )
+    .bind(room_uid)
+    .bind(user_uid)
+    .fetch_one(&state.db_pool)
+    .await
+    .unwrap_or((String::new(), false));
+
+    let user_uids_and_names_of_room: Vec<(&str, &str)> = users_of_room
+        .iter()
+        .map(|(uid, name)| (uid.as_ref(), name.as_ref()))
+        .collect();
+
+    let (others_names, others_schedule_indices) =
+        get_sanitized_others(others_schedule, user_uids_and_names_of_room, user_uid);
+
+    Ok(GetRoomRes {
+        event_name: room.event_name,
+        dates: serde_json::from_str(&room.dates)?,
+        slot_length: room.slot_length,
+        user_schedule,
+        others_schedule: others_schedule_indices,
+        others_names,
+        user_name,
+        time_range: TimeRange {
+            from_hour: room.time_min,
+            to_hour: room.time_max,
+        },
+        is_owner,
+    })
+}
+
+fn seperate_users_schedule<'a>(
+    schedule: Vec<Vec<Vec<&'a str>>>,
+    user_uid: &str,
+) -> (Vec<Vec<bool>>, Vec<Vec<Vec<&'a str>>>) {
+    let (user_schedule, others_schedule): (Vec<Vec<bool>>, Vec<Vec<Vec<&str>>>) = schedule
         .into_iter()
         .map(|row| {
             row.into_iter()
@@ -451,89 +579,63 @@ async fn get_room(req: Request<State>) -> tide::Result {
 
     let mut response = Response::new(StatusCode::Ok);
 
-    let room = sqlx::query!(
-        r#"
-        SELECT * FROM rooms
-        WHERE uid=?
-        "#,
-        room_uid
-    )
-    .fetch_one(&req.state().db_pool)
-    .await?;
-
     let user_uid = get_user_uid_from_cookie(&req)
         .await
         .unwrap_or(String::from_str("none")?);
 
-    let schedule: Vec<Vec<Vec<String>>> = serde_json::from_str(&room.schedule.unwrap())?;
-    let (user_schedule, others_schedule) = seperate_users_schedule(schedule, user_uid.clone());
+    let room_data = process_room_data(&req.state(), &room_uid, &user_uid)
+        .await
+        .unwrap();
 
-    let users_of_rooms = sqlx::query_as::<_, UserOfRoom>(
+    let response_body_string = serde_json::to_string(&room_data)?;
+    response.set_body(response_body_string);
+
+    Ok(response)
+}
+
+async fn delete_room(req: Request<State>) -> tide::Result {
+    let room_uid = req.param("room_uid")?;
+
+    let response = Response::new(StatusCode::Ok);
+    let user_uid: Option<String> = get_user_uid_from_cookie(&req).await;
+
+    if user_uid == None {
+        return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
+    }
+
+    let (is_owner,): (bool,) =
+        sqlx::query_as("SELECT is_owner FROM users_of_rooms WHERE user_uid=? AND room_uid=?")
+            .bind(user_uid)
+            .bind(room_uid)
+            .fetch_one(&req.state().db_pool)
+            .await?;
+
+    if !is_owner {
+        return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
+    }
+
+    match sqlx::query(
         r#"
-        SELECT * FROM users_of_rooms
-        WHERE room_uid=?
+        DELETE FROM rooms
+        WHERE uid=?
         "#,
     )
     .bind(room_uid)
-    .fetch_all(&req.state().db_pool)
-    .await?;
-
-    let mut user_index_dict = HashMap::new();
-    let mut users_fold_index = 0;
-
-    let (is_owner, user_name, others_names): (bool, String, Vec<String>) =
-        users_of_rooms.clone().into_iter().fold(
-            (false, String::new(), Vec::new()),
-            |(mut is_owner, mut user_name, mut others_names), user| {
-                if user.user_uid == user_uid {
-                    user_name = user.name;
-                    is_owner = user.is_owner;
-                } else {
-                    others_names.push(user.name);
-                    user_index_dict.insert(user_name.clone(), users_fold_index);
-                }
-                users_fold_index += 1;
-
-                (is_owner, user_name, others_names)
-            },
-        );
-
-    for (user_i, user) in users_of_rooms.iter().enumerate() {
-        user_index_dict.insert(user.user_uid.clone(), user_i);
-    }
-
-    let others_schedule_indices: Vec<Vec<Vec<usize>>> = others_schedule
-        .iter()
-        .map(|day| {
-            (*day)
-                .iter()
-                .map(|slot| {
-                    (*slot)
-                        .iter()
-                        .map(|uid| *user_index_dict.get(uid).unwrap())
-                        .collect()
-                })
-                .collect()
-        })
-        .collect();
-
-    let response_body = GetRoomRes {
-        event_name: room.event_name.unwrap(),
-        dates: serde_json::from_str(&room.dates.unwrap())?,
-        slot_length: room.slot_length.unwrap(),
-        user_schedule,
-        others_schedule: others_schedule_indices,
-        others_names,
-        user_name,
-        time_range: TimeRange {
-            from_hour: room.time_min.unwrap(),
-            to_hour: room.time_max.unwrap(),
-        },
-        is_owner, // can also be false if requester is not in users_of_rooms
+    .execute(&req.state().db_pool)
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
     };
 
-    let response_body_string = serde_json::to_string(&response_body)?;
-    response.set_body(response_body_string);
+    match sqlx::query("DELETE FROM users_of_rooms WHERE room_uid=?")
+        .bind(room_uid)
+        .execute(&req.state().db_pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
+    };
 
     Ok(response)
 }
@@ -548,8 +650,6 @@ struct CreateRoomReq {
 }
 
 async fn create_room(mut req: Request<State>) -> tide::Result {
-    println!("Create Room");
-
     let req_body: CreateRoomReq = req.body_json().await.unwrap_or_else(|_e| {
         panic!();
     });

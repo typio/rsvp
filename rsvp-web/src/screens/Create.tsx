@@ -3,7 +3,11 @@ import { useEffect, useState } from 'react'
 import { addDays, startOfDay } from 'date-fns'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faShare } from '@fortawesome/free-solid-svg-icons'
+import {
+  faShare,
+  faSquareArrowUpRight,
+  faSquareUpRight
+} from '@fortawesome/free-solid-svg-icons'
 
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -21,18 +25,15 @@ const storedCreateState = ((storedStr: string | null) =>
 )
 
 const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
-  const handeTimeInput = (e: any, isFrom: boolean) => {
-    const newValue = Number(e.target.value)
-    let newHour = 0
+  const [timeInputs, setTimeInputs] = useState({ from: '9', to: '5' })
 
-    if (isNaN(newValue) || newValue > 24) {
+  const handleTimeInput = (text: string, isFrom: boolean) => {
+    setTimeInputs({ ...timeInputs, [isFrom ? 'from' : 'to']: text })
+
+    let newValue = Number(text)
+
+    if (isNaN(newValue) || newValue < 1 || newValue > 12) {
       return
-    } else if (Number(newValue) == 24) {
-      newHour = 12
-    } else if (Number(newValue) > 12) {
-      newHour = newValue % 12
-    } else {
-      newHour = newValue
     }
 
     setScheduleData({
@@ -40,16 +41,16 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
       timeRange: {
         ...scheduleData.timeRange,
         [isFrom ? 'from' : 'to']: {
-          hour: newHour.toString(),
-          isAM: scheduleData.timeRange.from.isAM
+          ...scheduleData.timeRange.isAM,
+          hour: newValue.toString()
         }
       }
     })
   }
 
   return (
-    <div className="flex flex-col bg-card rounded-md p-4 gap-y-4">
-      <div className="flex flex-row gap-x-4 ">
+    <div className="flex flex-col bg-card rounded-md p-4 gap-y-4 ">
+      <div className="flex flex-row gap-x-4 items-end">
         <div className="flex flex-col gap-y-1 flex-1">
           <label className="text-sm font-medium text-muted-foreground">
             Event name
@@ -64,8 +65,12 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
             }
           />
         </div>
-        <Button onClick={shareRoom}>
-          <FontAwesomeIcon icon={faShare} />
+        <Button
+          onClick={shareRoom}
+          className="flex flex-row gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
+        >
+          <FontAwesomeIcon icon={faSquareUpRight} />
+          Share
         </Button>
       </div>
       <DatePickerMultiple
@@ -74,87 +79,89 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
           setScheduleData({ ...scheduleData, dates: newDates })
         }}
       />
-      <div className="flex flex-row gap-x-8">
-        <div className="flex flex-row flex-1 gap-x-2">
-          <Input
-            placeholder="9"
-            type="number"
-            min={1}
-            max={12}
-            onChange={e => {
-              handeTimeInput(e, true)
-            }}
-            value={scheduleData.timeRange.from.hour}
-          />
-          <Button
-            onClick={() =>
-              setScheduleData({
-                ...scheduleData,
-                timeRange: {
-                  ...scheduleData.timeRange,
-                  from: {
-                    hour: scheduleData.timeRange.from.hour,
-                    isAM: !scheduleData.timeRange.from.isAM
+      <div className="flex flex-row justify-between">
+        <div className="flex flex-row gap-x-4 mr-4">
+          <div className="flex flex-row flex-1 gap-x-2">
+            <Input
+              className="w-16 text-center"
+              onChange={e => {
+                handleTimeInput(e.target.value, true)
+              }}
+              value={timeInputs.from}
+            />
+            <Button
+              className="bg-muted text-accent hover:bg-accent hover:text-muted w-12 text-center font-time"
+              onClick={() =>
+                setScheduleData({
+                  ...scheduleData,
+                  timeRange: {
+                    ...scheduleData.timeRange,
+                    from: {
+                      hour: scheduleData.timeRange.from.hour,
+                      isAM: !scheduleData.timeRange.from.isAM
+                    }
                   }
-                }
-              })
-            }
-          >
-            {scheduleData.timeRange.from.isAM ? 'AM' : 'PM'}
-          </Button>
-        </div>
-        <div className="flex flex-row flex-1 gap-x-2">
-          <Input
-            min={1}
-            max={12}
-            placeholder="5"
-            onChange={e => {
-              handeTimeInput(e, false)
-            }}
-            value={scheduleData.timeRange.to.hour}
-          />
-          <Button
-            onClick={() =>
-              setScheduleData({
-                ...scheduleData,
-                timeRange: {
-                  ...scheduleData.timeRange,
-                  from: {
-                    hour: scheduleData.timeRange.from.hour,
-                    isAM: !scheduleData.timeRange.from.isAM
+                })
+              }
+            >
+              {scheduleData.timeRange.from.isAM ? 'AM' : 'PM'}
+            </Button>
+          </div>
+          <div className="flex flex-row flex-1 gap-x-2">
+            <Input
+              onChange={e => {
+                handleTimeInput(e.target.value, false)
+              }}
+              value={timeInputs.to}
+              className="w-20 text-center"
+            />
+            <Button
+              className="bg-muted text-accent hover:bg-accent hover:text-muted w-16 text-center font-time"
+              onClick={() =>
+                setScheduleData({
+                  ...scheduleData,
+                  timeRange: {
+                    ...scheduleData.timeRange,
+                    to: {
+                      hour: scheduleData.timeRange.to.hour,
+                      isAM: !scheduleData.timeRange.to.isAM
+                    }
                   }
-                }
-              })
-            }
-          >
-            {scheduleData.timeRange.to.isAM ? 'AM' : 'PM'}
-          </Button>
+                })
+              }
+            >
+              {scheduleData.timeRange.to.isAM ? 'AM' : 'PM'}
+            </Button>
+          </div>
         </div>
       </div>
-      <div className="flex flex-row items-center justify-between">
-        <Label htmlFor="slot-length" className="min-w-24">
-          {' '}
-          Slot Length
+      <div className="flex flex-row items-center ">
+        <Label htmlFor="slot-length" className="mr-6">
+          Granularity
         </Label>
         <ToggleGroup
           id="slot-length"
           type="single"
           onValueChange={e =>
-            setScheduleData({ ...scheduleData, slotLength: Number(e) })
+            setScheduleData({
+              ...scheduleData,
+              slotLength: Math.max(15, Math.min(60, Number(e)))
+            })
           }
           value={String(scheduleData.slotLength)}
+          className="flex flex-row justify-between gap-x-2 max-w-80"
         >
-          <ToggleGroupItem value={'15'} className="w-20">
-            15 min
+          <ToggleGroupItem value={'15'} className="w-14">
+            15m
           </ToggleGroupItem>
-          <ToggleGroupItem value={'20'} className="w-20">
-            20 min
+          <ToggleGroupItem value={'20'} className="w-14">
+            20m
           </ToggleGroupItem>
-          <ToggleGroupItem value={'30'} className="w-20">
-            30 min
+          <ToggleGroupItem value={'30'} className="w-14">
+            30m
           </ToggleGroupItem>
-          <ToggleGroupItem value={'60'} className="w-20">
-            1 hour
+          <ToggleGroupItem value={'60'} className="w-14">
+            1h
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
@@ -214,7 +221,6 @@ const Create = ({ setIsCreate }) => {
       credentials: 'include'
     }).then(res => {
       res.json().then(resJSON => {
-        console.log(resJSON)
         history.pushState({ page: 1 }, 'room', `/${resJSON.room_uid}`)
         setIsCreate(false)
       })
@@ -222,10 +228,8 @@ const Create = ({ setIsCreate }) => {
   }
 
   return (
-    <main className="gap-x-8">
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-col"></div>
-
+    <main className="gap-x-8 w-full max-w-lg mx-auto">
+      <div className="flex flex-col gap-4">
         <CreateOptions
           scheduleData={scheduleData}
           setScheduleData={setScheduleData}
