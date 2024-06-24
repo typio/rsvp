@@ -5,7 +5,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useState } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
-import { Colors } from '@/colors'
 
 const HEADER_HEIGHT = 64
 const CELL_HEIGHT = 24
@@ -38,9 +37,9 @@ const Schedule = ({
   )
 
   const timeDifference =
-    toHour24 <= fromHour24
-      ? (toHour24 + 24 - fromHour24) * 60
-      : (toHour24 - fromHour24) * 60
+    toHour24 >= fromHour24
+      ? (toHour24 - fromHour24) * 60
+      : (toHour24 + 24 - fromHour24) * 60
 
   const timeSlots = timeDifference / data.slotLength
 
@@ -116,6 +115,16 @@ const Schedule = ({
 
     setData({ ...data, userSchedule: newSchedule })
   }
+
+  const bgColorString = window
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue('--background')
+  const primaryColorString = window
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue('--primary')
+  const secondaryColorString = window
+    .getComputedStyle(document.documentElement)
+    .getPropertyValue('--secondary')
 
   const DayColumn = ({
     date,
@@ -214,26 +223,26 @@ const Schedule = ({
       }
     }
 
-    const userColor = tinycolor(`hsl(${Colors.dark.primary})`)
-    const otherColor = tinycolor(`hsl(${Colors.dark.secondary})`)
-
-    let bg_color: tinycolor.Instance
+    const bgColor = tinycolor('hsl ' + bgColorString)
+    const userColor = tinycolor('hsl ' + primaryColorString)
+    const otherColor = tinycolor('hsl ' + secondaryColorString)
+    let slotColor: tinycolor.Instance
     let alpha = 1
 
     if (!isCreate) {
       alpha = hoveringUser === null ? 1 : 0.5
 
       if ((isCurrentlySelected || isCellSelected) && othersValue?.length > 0) {
-        bg_color = tinycolor
+        slotColor = tinycolor
           .mix(userColor, otherColor, 60)
           .darken(10)
           .saturate(100)
       } else if (isCellSelected || isCurrentlySelected) {
-        bg_color = userColor
+        slotColor = userColor
       } else if (othersValue?.length > 0) {
-        bg_color = otherColor
+        slotColor = otherColor
       } else {
-        bg_color = tinycolor(`hsl(${Colors.dark.background})`)
+        slotColor = bgColor
       }
 
       if (
@@ -243,20 +252,20 @@ const Schedule = ({
         alpha = 1
     } else {
       if (isCellSelected || isCurrentlySelected) {
-        bg_color = userColor
+        slotColor = tinycolor(userColor)
       } else {
-        bg_color = tinycolor(`hsl(${Colors.dark.background})`)
+        slotColor = bgColor
       }
     }
 
     if (isCurrentlySelected)
-      if (currentSelection.additive) bg_color.lighten(10)
-      else bg_color.setAlpha(0.5)
+      if (currentSelection.additive) slotColor.lighten(12)
+      else slotColor.setAlpha(0.5)
 
     if (!isCellSelected && isCurrentlySelected && !currentSelection.additive)
-      bg_color = tinycolor(`hsl(${Colors.dark.background})`)
+      slotColor = bgColor
 
-    let bg_color_string = bg_color.toHex8String()
+    let slotColorString = slotColor.toHex8String()
 
     return (
       <div
@@ -295,11 +304,11 @@ const Schedule = ({
         }}
       >
         <div
-          className={`w-full h-full bg-background overflow-hidden ${place === 'first' ? 'rounded-t-sm' : place === 'last' ? 'rounded-b-sm' : place === 'only' ? 'rounded' : ''}`}
+          className={`w-full h-full bg-background overflow-hidden ${place === 'first' ? 'rounded-t' : place === 'last' ? 'rounded-b' : place === 'only' ? 'rounded' : ''}`}
         >
           <div
             className="w-full h-full"
-            style={{ backgroundColor: bg_color_string, opacity: alpha }}
+            style={{ backgroundColor: slotColorString, opacity: alpha }}
           />
         </div>
       </div>
@@ -308,10 +317,10 @@ const Schedule = ({
 
   return (
     <div>
-      <div className="flex flex-col p-6 bg-card rounded-lg select-none max-w-lg mx-auto">
+      <div className="flex flex-col p-6 bg-card shadow-xl  rounded-lg select-none max-w-lg mx-auto">
         <div className="flex flex-row justify-center mb-4">
           <div
-            className="flex flex-col justify-between font-time text-sm text-right mr-4"
+            className="flex flex-col justify-between font-time text-sm text-right "
             style={{
               marginTop: HEADER_HEIGHT
             }}
@@ -353,15 +362,16 @@ const Schedule = ({
         </div>
         <div className="flex flex-row justify-end pt-2">
           <Button
-            onClick={() =>
+            onClick={() => {
               setData({
                 ...data,
                 userSchedule: [...data.userSchedule].map(day =>
                   day.map(_ => false)
                 )
               })
-            }
-            className="flex flex-row gap-x-2 items-center bg-muted text-destructive hover:bg-destructive hover:text-destructive-foreground"
+            }}
+            variant={'destructive'}
+            className="gap-x-2 items-center"
           >
             <FontAwesomeIcon icon={faEraser} />
             Clear

@@ -1,7 +1,5 @@
 'use client'
 
-import { Calendar as CalendarIcon } from 'lucide-react'
-
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
@@ -12,6 +10,8 @@ import {
 } from '@/components/ui/popover'
 import { toast } from 'sonner'
 import { isSameDay, set } from 'date-fns'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faCalendar } from '@fortawesome/free-solid-svg-icons'
 
 export const DatePickerMultiple = ({
   dates,
@@ -50,11 +50,11 @@ export const DatePickerMultiple = ({
             id="date"
             variant={'outline'}
             className={cn(
-              'w-[300px] justify-start text-left font-normal',
-              (dates ?? []).length === 0 && 'text-muted-foreground'
+              'justify-start text-left font-normal gap-x-2',
+              (dates ?? []).length === 0 && 'text-secondary-foreground'
             )}
           >
-            <CalendarIcon className="mr-2 h-4 w-4" />
+            <FontAwesomeIcon icon={faCalendar} />
             Select Days
           </Button>
         </PopoverTrigger>

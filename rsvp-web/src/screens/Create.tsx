@@ -4,11 +4,13 @@ import { addDays, startOfDay } from 'date-fns'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
-  faShare,
-  faSquareArrowUpRight,
+  faHandshake,
+  faPhone,
+  faPlaneDeparture,
   faSquareUpRight
 } from '@fortawesome/free-solid-svg-icons'
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -49,129 +51,148 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
   }
 
   return (
-    <div className="flex flex-col bg-card rounded-md p-4 gap-y-4 ">
-      <div className="flex flex-row gap-x-4 items-end">
-        <div className="flex flex-col gap-y-1 flex-1">
-          <label className="text-sm font-medium text-muted-foreground">
-            Event name
-          </label>
-          <Input
-            value={scheduleData.event_name}
-            onChange={e =>
-              setScheduleData({
-                ...scheduleData,
-                event_name: e.target.value
-              })
-            }
-          />
-        </div>
-        <Button
-          onClick={shareRoom}
-          className="flex flex-row gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
-        >
-          <FontAwesomeIcon icon={faSquareUpRight} />
-          Share
-        </Button>
-      </div>
-      <DatePickerMultiple
-        dates={scheduleData.dates}
-        setDates={newDates => {
-          setScheduleData({ ...scheduleData, dates: newDates })
-        }}
-      />
-      <div className="flex flex-row justify-between">
-        <div className="flex flex-row gap-x-4 mr-4">
-          <div className="flex flex-row flex-1 gap-x-2">
+    <div className="flex flex-col">
+      <div className="flex flex-col bg-card shadow-xl rounded-md p-4 gap-y-4">
+        <div className="flex flex-row gap-x-4 items-end">
+          <div className="flex flex-col gap-y-1 flex-1">
+            <label className="text-sm ml-2 font-medium text-muted-foreground">
+              Event name
+            </label>
             <Input
-              className="w-16 text-center"
-              onChange={e => {
-                handleTimeInput(e.target.value, true)
-              }}
-              value={timeInputs.from}
-            />
-            <Button
-              className="bg-muted text-accent hover:bg-accent hover:text-muted w-12 text-center font-time"
-              onClick={() =>
+              value={scheduleData.event_name}
+              onChange={e =>
                 setScheduleData({
                   ...scheduleData,
-                  timeRange: {
-                    ...scheduleData.timeRange,
-                    from: {
-                      hour: scheduleData.timeRange.from.hour,
-                      isAM: !scheduleData.timeRange.from.isAM
-                    }
-                  }
+                  event_name: e.target.value
                 })
               }
-            >
-              {scheduleData.timeRange.from.isAM ? 'AM' : 'PM'}
-            </Button>
-          </div>
-          <div className="flex flex-row flex-1 gap-x-2">
-            <Input
-              onChange={e => {
-                handleTimeInput(e.target.value, false)
-              }}
-              value={timeInputs.to}
-              className="w-20 text-center"
             />
-            <Button
-              className="bg-muted text-accent hover:bg-accent hover:text-muted w-16 text-center font-time"
-              onClick={() =>
+          </div>
+          <Button
+            onClick={shareRoom}
+            className="flex flex-row gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
+          >
+            <FontAwesomeIcon icon={faSquareUpRight} />
+            Share
+          </Button>
+        </div>
+        <DatePickerMultiple
+          dates={scheduleData.dates}
+          setDates={newDates => {
+            setScheduleData({ ...scheduleData, dates: newDates })
+          }}
+        />
+        <div className="flex flex-row justify-between items-center">
+          <div className="flex flex-col gap-y-2 mr-4">
+            <div className="flex flex-row items-center justify-end gap-x-4 ">
+              <Label className="ml-2 text-sm font-medium text-muted-foreground">
+                From
+              </Label>
+              <div className="flex flex-row gap-x-2">
+                <Input
+                  className="w-12 text-center"
+                  onChange={e => {
+                    handleTimeInput(e.target.value, true)
+                  }}
+                  value={timeInputs.from}
+                />
+                <Button
+                  className="w-12"
+                  onClick={() =>
+                    setScheduleData({
+                      ...scheduleData,
+                      timeRange: {
+                        ...scheduleData.timeRange,
+                        from: {
+                          hour: scheduleData.timeRange.from.hour,
+                          isAM: !scheduleData.timeRange.from.isAM
+                        }
+                      }
+                    })
+                  }
+                >
+                  {scheduleData.timeRange.from.isAM ? 'am' : 'pm'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-row items-center justify-end gap-x-4 ">
+              <Label className="ml-2 text-sm font-medium text-muted-foreground">
+                To
+              </Label>
+              <div className="flex flex-row gap-x-2">
+                <Input
+                  className="w-12 text-center"
+                  onChange={e => {
+                    handleTimeInput(e.target.value, false)
+                  }}
+                  value={timeInputs.to}
+                />
+                <Button
+                  className="w-12"
+                  onClick={() =>
+                    setScheduleData({
+                      ...scheduleData,
+                      timeRange: {
+                        ...scheduleData.timeRange,
+                        to: {
+                          hour: scheduleData.timeRange.to.hour,
+                          isAM: !scheduleData.timeRange.to.isAM
+                        }
+                      }
+                    })
+                  }
+                >
+                  {scheduleData.timeRange.to.isAM ? 'am' : 'pm'}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-y-2">
+            <Label
+              htmlFor="slot-length"
+              className="ml-2 text-sm font-medium text-muted-foreground"
+            >
+              Granularity
+            </Label>
+            <ToggleGroup
+              id="slot-length"
+              type="single"
+              onValueChange={e =>
                 setScheduleData({
                   ...scheduleData,
-                  timeRange: {
-                    ...scheduleData.timeRange,
-                    to: {
-                      hour: scheduleData.timeRange.to.hour,
-                      isAM: !scheduleData.timeRange.to.isAM
-                    }
-                  }
+                  userSchedule: [...scheduleData.userSchedule].map(day =>
+                    day.map(_ => false)
+                  ),
+                  slotLength: Math.max(15, Math.min(60, Number(e)))
                 })
               }
+              value={String(scheduleData.slotLength)}
+              className=""
             >
-              {scheduleData.timeRange.to.isAM ? 'AM' : 'PM'}
-            </Button>
+              <ToggleGroupItem value={'15'} className="w-14">
+                15m
+              </ToggleGroupItem>
+              <ToggleGroupItem value={'20'} className="w-14">
+                20m
+              </ToggleGroupItem>
+              <ToggleGroupItem value={'30'} className="w-14">
+                30m
+              </ToggleGroupItem>
+              <ToggleGroupItem value={'60'} className="w-14">
+                1h
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
         </div>
-      </div>
-      <div className="flex flex-row items-center ">
-        <Label htmlFor="slot-length" className="mr-6">
-          Granularity
-        </Label>
-        <ToggleGroup
-          id="slot-length"
-          type="single"
-          onValueChange={e =>
-            setScheduleData({
-              ...scheduleData,
-              slotLength: Math.max(15, Math.min(60, Number(e)))
-            })
-          }
-          value={String(scheduleData.slotLength)}
-          className="flex flex-row justify-between gap-x-2 max-w-80"
-        >
-          <ToggleGroupItem value={'15'} className="w-14">
-            15m
-          </ToggleGroupItem>
-          <ToggleGroupItem value={'20'} className="w-14">
-            20m
-          </ToggleGroupItem>
-          <ToggleGroupItem value={'30'} className="w-14">
-            30m
-          </ToggleGroupItem>
-          <ToggleGroupItem value={'60'} className="w-14">
-            1h
-          </ToggleGroupItem>
-        </ToggleGroup>
       </div>
     </div>
   )
 }
 
-const Create = ({ setIsCreate }) => {
+const Create = ({ setScreen }: { setScreen: React.Dispatch<string> }) => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>({
-    event_name: '',
+    eventName: '',
     dates:
       storedCreateState?.dates.map((d: string) => new Date(d)) ??
       Array.from({ length: 7 }).map((_, i) =>
@@ -189,7 +210,7 @@ const Create = ({ setIsCreate }) => {
   useEffect(() => {
     localStorage.setItem('storedCreateState', JSON.stringify(scheduleData))
   }, [
-    scheduleData.event_name,
+    scheduleData.eventName,
     scheduleData.dates,
     scheduleData.timeRange,
     scheduleData.slotLength,
@@ -198,7 +219,7 @@ const Create = ({ setIsCreate }) => {
 
   const shareRoom = () => {
     let req = JSON.stringify({
-      event_name: scheduleData.event_name,
+      event_name: scheduleData.eventName,
       dates: scheduleData.dates,
       time_range: {
         from_hour:
@@ -222,28 +243,49 @@ const Create = ({ setIsCreate }) => {
     }).then(res => {
       res.json().then(resJSON => {
         history.pushState({ page: 1 }, 'room', `/${resJSON.room_uid}`)
-        setIsCreate(false)
+        setScreen('join')
       })
     })
   }
 
   return (
     <main className="gap-x-8 w-full max-w-lg mx-auto">
-      <div className="flex flex-col gap-4">
-        <CreateOptions
-          scheduleData={scheduleData}
-          setScheduleData={setScheduleData}
-          shareRoom={shareRoom}
-        />
+      <Tabs defaultValue="time">
+        <TabsList>
+          <TabsTrigger value="time">
+            <FontAwesomeIcon icon={faHandshake} />
+            Time
+          </TabsTrigger>
+          <TabsTrigger value="days">
+            <FontAwesomeIcon icon={faPlaneDeparture} />
+            Days
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="time">
+          <div className="flex flex-col gap-4">
+            <CreateOptions
+              scheduleData={scheduleData}
+              setScheduleData={setScheduleData}
+              shareRoom={shareRoom}
+            />
 
-        {scheduleData.dates.length > 0 && (
-          <Schedule
-            data={scheduleData}
-            setData={setScheduleData}
-            isCreate={true}
-          />
-        )}
-      </div>
+            {scheduleData.dates.length > 0 && (
+              <Schedule
+                data={scheduleData}
+                setData={setScheduleData}
+                isCreate={true}
+                hoveringUser={null}
+              />
+            )}
+          </div>
+        </TabsContent>
+        <TabsContent value="days">
+          <div className="w-full mt-12 flex flex-col justify-center items-center">
+            <span>I'm working on this one...</span>
+            <span className="mt-4 text-4xl">🫣</span>
+          </div>
+        </TabsContent>
+      </Tabs>
     </main>
   )
 }

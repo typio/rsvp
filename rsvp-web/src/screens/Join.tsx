@@ -11,7 +11,13 @@ import Schedule from '.././components/schedule'
 import { h24ToTimeRange } from '@/utils'
 import { ScheduleData } from '@/types'
 
-const Join = ({ setIsCreate, setWSMode }) => {
+const Join = ({
+  setScreen,
+  setWSMode
+}: {
+  setScreen: React.Dispatch<string>
+  setWSMode: React.Dispatch<any>
+}) => {
   const room_uid = window.location.pathname.slice(1)
 
   const [loading, setLoading] = useState(true)
@@ -125,7 +131,7 @@ const Join = ({ setIsCreate, setWSMode }) => {
       }).then(res => {
         if (res.ok) {
           history.pushState({ page: 1 }, 'room', '/')
-          setIsCreate(true)
+          setScreen('create')
         }
       })
     } catch (e) {
@@ -187,7 +193,7 @@ const Join = ({ setIsCreate, setWSMode }) => {
   return (
     <main className="gap-x-8">
       <div className="flex flex-col gap-2">
-        <div className="flex flex-col gap-y-2 mb-4 bg-card p-4 rounded-md">
+        <div className="flex flex-col gap-y-2 mb-4 bg-card shadow-xl p-4 rounded-md">
           <div className="flex flex-row gap-x-4 items-end ">
             {isOwner ? (
               <div className="flex flex-col gap-y-1 flex-1">
@@ -292,14 +298,11 @@ const Join = ({ setIsCreate, setWSMode }) => {
 
         {/* TODO: Show drop down asking to confirm delete and one for asking reason (e.g. No times work, I'm not coming, Custom, etc...) */}
         {isOwner ? (
-          <Button
-            className="bg-muted text-destructive hover:bg-destructive hover:text-destructive-foreground mt-4"
-            onClick={deleteRoom}
-          >
+          <Button variant={'destructive'} className="mt-4" onClick={deleteRoom}>
             Delete Event
           </Button>
         ) : (
-          <Button className="bg-muted text-destructive hover:bg-destructive hover:text-destructive-foreground mt-4">
+          <Button variant={'destructive'} className="mt-4">
             I can't make it.
           </Button>
         )}

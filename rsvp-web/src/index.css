@@ -1,30 +1,28 @@
-@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 216.39 100% 7%;
-    --foreground: 229 23% 99%;
-    --muted: 216.39 90% 17%;
+    --background: 211 100% 8%;
+    --foreground: 202 20% 92%;
+    --muted: 212 100% 20%;
     --muted-foreground: 215.9 25% 40%;
     --popover: 216.39 100% 11.96%;
     --popover-foreground: 0 0% 100%;
-    --card: 216.39 100% 11.96%;
+    --card: 212 100% 14%;
     --card-foreground: 0 0% 100%;
     --border: 216.59 100% 9.04%;
-    --input: 216.59 100% 8.04%;
-    --primary: 50.82 100% 50%;
+    --input: 211 100% 12%;
+    --primary: 51 100% 50%;
     --primary-foreground: 0 0% 0%;
-    --secondary: 212.11 100% 36.27%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 212 100% 36%;
+    --secondary-foreground: 212 100% 98%;
     --accent: 174 53% 68%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 355.1 84.48% 54.51%;
-    --destructive-foreground: 0 0% 100%;
-    --ring: 229 100% 62%;
+    --destructive: 0 95% 60%;
+    --destructive-foreground: 0 100% 92%;
+    --ring: 51 100% 50%;
     --radius: 0.75rem;
   }
 }
