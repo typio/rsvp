@@ -20,4 +20,5 @@ export type ScheduleData = {
   timeRange: H12TimeRange
   userSchedule: boolean[][]
   othersSchedule: number[][][]
+  others: string[]
 }

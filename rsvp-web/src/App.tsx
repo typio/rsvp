@@ -11,17 +11,17 @@ const App = () => {
   const [screen, setScreen] = useState<'create' | 'join' | 'about'>()
   const [WSMode, setWSMode] = useState(null)
 
-  useEffect(() => {
-    if (window.location.pathname === '/') setScreen('create')
-    else if (window.location.pathname === '/about') setScreen('about')
-    else setScreen('join')
-  }, [])
+  useEffect(() => navigateToScreen(window.location.pathname), [])
 
-  window.addEventListener('pushState', () => {
-    if (window.location.pathname === '/') setScreen('create')
-    else if (window.location.pathname === '/about') setScreen('about')
+  window?.addEventListener('pushState', (event: any) =>
+    navigateToScreen(new URL(event.destination.url).pathname)
+  )
+
+  const navigateToScreen = (path: string) => {
+    if (path === '/') setScreen('create')
+    else if (path === '/about') setScreen('about')
     else setScreen('join')
-  })
+  }
 
   return (
     <>

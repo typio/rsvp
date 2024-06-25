@@ -29,6 +29,8 @@ const Join = ({
     shouldReconnect: () => true
   })
 
+  const [slotUsers, setSlotUsers] = useState<null | number[]>(null)
+
   useEffect(() => {
     if (lastMessage !== null) {
       let message = JSON.parse(lastMessage.data)
@@ -41,7 +43,7 @@ const Join = ({
           }))
           break
         case 'editUserName':
-          setOthers(message.payload)
+          setScheduleData(p => ({ ...p, others: message.payload }))
           break
         case 'editSchedule':
           setScheduleData(p => ({
@@ -82,7 +84,6 @@ const Join = ({
 
   const [scheduleData, setScheduleData] = useState<ScheduleData>()
   const [userName, setUserName] = useState<String>('')
-  const [others, setOthers] = useState<String[]>([])
   const [isOwner, setIsOwner] = useState(false)
   const [hoveringUser, setHoveringUser] = useState<null | number>(null)
 
@@ -109,10 +110,10 @@ const Join = ({
             timeRange: h24ToTimeRange(resJSON.time_range),
             slotLength: resJSON.slot_length,
             userSchedule: resJSON.user_schedule,
-            othersSchedule: resJSON.others_schedule
+            othersSchedule: resJSON.others_schedule,
+            others: resJSON.others_names
           })
           setUserName(resJSON.user_name ?? '')
-          setOthers(resJSON.others_names ?? [])
           setIsOwner(resJSON.is_owner ?? false)
           setError(null)
         })
@@ -255,7 +256,7 @@ const Join = ({
         <div className="flex flex-row justify-between">
           <div className="flex flex-row gap-x-2 items-center">
             <div
-              className={`opacity-${hoveringUser != null && hoveringUser != 0 ? '50' : '100'}`}
+              className={`opacity-${(hoveringUser != null && hoveringUser != 0) || slotUsers?.at(0) !== -1 ? '50' : '100'}`}
               onMouseEnter={() => setHoveringUser(0)}
               onMouseLeave={() => setHoveringUser(null)}
             >
@@ -266,10 +267,10 @@ const Join = ({
             />
           </div>
 
-          {others?.length > 0 && (
+          {scheduleData?.others.length > 0 && (
             <div className="flex flex-row gap-x-2 items-center">
               <div className="flex flex-row gap-x-4 items-center">
-                {others?.map((user: string, i) => (
+                {scheduleData?.others?.map((user: string, i) => (
                   <div
                     key={i}
                     className={`opacity-${hoveringUser != null && hoveringUser != i + 1 ? '50' : '100'}`}
@@ -293,6 +294,7 @@ const Join = ({
             setData={setScheduleData}
             isCreate={false}
             hoveringUser={hoveringUser}
+            setSlotUsers={setSlotUsers}
           />
         )}
 

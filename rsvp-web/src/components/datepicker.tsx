@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 import { isSameDay, set } from 'date-fns'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCalendar } from '@fortawesome/free-solid-svg-icons'
+import { useEffect, useState } from 'react'
 
 export const DatePickerMultiple = ({
   dates,
@@ -19,7 +20,7 @@ export const DatePickerMultiple = ({
   className
 }: {
   dates: Date[] | undefined
-  setDates: React.Dispatch<React.SetStateAction<Date[]>>
+  setDates: (...args: any) => any
   className?: string
 }) => {
   const trySetDates = (newDates: Date[] | undefined, nD: Date) => {
@@ -42,6 +43,11 @@ export const DatePickerMultiple = ({
     }
   }
 
+  const [mouseDown, setMouseDown] = useState(false)
+
+  window.addEventListener('mousedown', () => setMouseDown(true))
+  window.addEventListener('mouseup', () => setMouseDown(false))
+
   return (
     <div className={cn('grid gap-2', className)}>
       <Popover>
@@ -50,8 +56,8 @@ export const DatePickerMultiple = ({
             id="date"
             variant={'outline'}
             className={cn(
-              'justify-start text-left font-normal gap-x-2',
-              (dates ?? []).length === 0 && 'text-secondary-foreground'
+              'justify-start text-left font-normal gap-x-2 text-white',
+              (dates ?? []).length === 0 && 'text-muted-foreground'
             )}
           >
             <FontAwesomeIcon icon={faCalendar} />
@@ -61,9 +67,16 @@ export const DatePickerMultiple = ({
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
             initialFocus
+            disabled={{ before: new Date() }}
             mode="multiple"
             selected={dates}
+            // NOTE: This dragging setup is buggy, I really need an OnDayMouseDown to do this
             onSelect={trySetDates}
+            onDayMouseEnter={e => {
+              if (mouseDown) {
+                trySetDates(dates, e)
+              }
+            }}
           />
         </PopoverContent>
       </Popover>

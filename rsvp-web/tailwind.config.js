@@ -10,7 +10,7 @@ module.exports = {
   prefix: '',
   theme: {
     fontFamily: {
-      sans: ['Poppins', 'Lato', 'sans-serif'],
+      sans: ['Poppins', 'sans-serif'],
       time: ['Chivo Mono', 'monospace']
     },
 

@@ -5,7 +5,6 @@ import { addDays, startOfDay } from 'date-fns'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
   faHandshake,
-  faPhone,
   faPlaneDeparture,
   faSquareUpRight
 } from '@fortawesome/free-solid-svg-icons'
@@ -26,11 +25,23 @@ const storedCreateState = ((storedStr: string | null) =>
   localStorage.getItem('storedCreateState')
 )
 
-const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
-  const [timeInputs, setTimeInputs] = useState({ from: '9', to: '5' })
+const CreateOptions = ({
+  scheduleData,
+  setScheduleData,
+  shareRoom
+}: {
+  scheduleData: ScheduleData
+  setScheduleData: React.Dispatch<ScheduleData>
+  shareRoom: () => any
+}) => {
+  const [timeInputs, setTimeInputs] = useState({
+    from: scheduleData.timeRange.from.hour,
+    to: scheduleData.timeRange.to.hour
+  })
 
   const handleTimeInput = (text: string, isFrom: boolean) => {
-    setTimeInputs({ ...timeInputs, [isFrom ? 'from' : 'to']: text })
+    const pos = isFrom ? 'from' : 'to'
+    setTimeInputs({ ...timeInputs, [pos]: text })
 
     let newValue = Number(text)
 
@@ -43,8 +54,8 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
       timeRange: {
         ...scheduleData.timeRange,
         [isFrom ? 'from' : 'to']: {
-          ...scheduleData.timeRange.isAM,
-          hour: newValue.toString()
+          hour: newValue.toString(),
+          isAM: scheduleData.timeRange[pos].isAM
         }
       }
     })
@@ -52,18 +63,18 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
 
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col bg-card shadow-xl rounded-md p-4 gap-y-4">
+      <div className="flex flex-col bg-card shadow-xl rounded-md p-4 gap-y-6">
         <div className="flex flex-row gap-x-4 items-end">
           <div className="flex flex-col gap-y-1 flex-1">
             <label className="text-sm ml-2 font-medium text-muted-foreground">
               Event name
             </label>
             <Input
-              value={scheduleData.event_name}
+              value={scheduleData.eventName}
               onChange={e =>
                 setScheduleData({
                   ...scheduleData,
-                  event_name: e.target.value
+                  eventName: e.target.value
                 })
               }
             />
@@ -76,13 +87,15 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
             Share
           </Button>
         </div>
-        <DatePickerMultiple
-          dates={scheduleData.dates}
-          setDates={newDates => {
-            setScheduleData({ ...scheduleData, dates: newDates })
-          }}
-        />
-        <div className="flex flex-row justify-between items-center">
+        <div className="flex flex-row flex-wrap justify-around gap-4 items-center">
+          <DatePickerMultiple
+            dates={scheduleData.dates}
+            setDates={newDates => {
+              setScheduleData({ ...scheduleData, dates: newDates })
+            }}
+            className="w-80"
+          />
+
           <div className="flex flex-col gap-y-2 mr-4">
             <div className="flex flex-row items-center justify-end gap-x-4 ">
               <Label className="ml-2 text-sm font-medium text-muted-foreground">
@@ -192,7 +205,7 @@ const CreateOptions = ({ scheduleData, setScheduleData, shareRoom }: any) => {
 
 const Create = ({ setScreen }: { setScreen: React.Dispatch<string> }) => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>({
-    eventName: '',
+    eventName: storedCreateState?.eventName ?? 'My Event',
     dates:
       storedCreateState?.dates.map((d: string) => new Date(d)) ??
       Array.from({ length: 7 }).map((_, i) =>
@@ -249,9 +262,9 @@ const Create = ({ setScreen }: { setScreen: React.Dispatch<string> }) => {
   }
 
   return (
-    <main className="gap-x-8 w-full max-w-lg mx-auto">
+    <main className="gap-x-8 w-full max-w-3xl mx-auto">
       <Tabs defaultValue="time">
-        <TabsList>
+        <TabsList className="mb-4">
           <TabsTrigger value="time">
             <FontAwesomeIcon icon={faHandshake} />
             Time
@@ -261,7 +274,7 @@ const Create = ({ setScreen }: { setScreen: React.Dispatch<string> }) => {
             Days
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="time">
+        <TabsContent value="time" className="rounded-md">
           <div className="flex flex-col gap-4">
             <CreateOptions
               scheduleData={scheduleData}
