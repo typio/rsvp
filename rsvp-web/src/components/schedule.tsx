@@ -5,8 +5,10 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
+
+const TIME_COL_WIDTH = 64
 const HEADER_HEIGHT = 64
-const CELL_HEIGHT = 24
+const CELL_HEIGHT = 20
 
 enum Place {
   MIDDLE,
@@ -40,13 +42,15 @@ const Schedule = ({
   setData,
   isCreate,
   hoveringUser,
-  setSlotUsers
+  setSlotUsers,
+  othersColors
 }: {
   data: ScheduleData
   setData: React.Dispatch<ScheduleData>
   isCreate: boolean
   hoveringUser: null | number
-  setSlotUsers: React.Dispatch<null | number[]>
+  setSlotUsers: React.Dispatch<null | boolean[]>
+  othersColors: string[]
 }) => {
   const convertTo24Hour = (hour: string, isAM: boolean) => {
     let hourNum = parseInt(hour)
@@ -139,11 +143,11 @@ const Schedule = ({
       .getPropertyValue('--background')
     const userColorString = window
       .getComputedStyle(document.documentElement)
-      .getPropertyValue('--primary')
-    const otherColorString = window
-      .getComputedStyle(document.documentElement)
       .getPropertyValue('--secondary')
-    return { bgColorString, userColorString, otherColorString }
+    const allColorString = window
+      .getComputedStyle(document.documentElement)
+      .getPropertyValue('--primary')
+    return { bgColorString, userColorString, allColorString }
   }, [])
 
   const DayColumn = ({
@@ -161,23 +165,7 @@ const Schedule = ({
     let nSlots = 60 / data.slotLength
 
     return (
-      <div className="flex flex-col px-0.5 flex-grow min-w-14 justify-center">
-        <div
-          className="flex flex-grow flex-col justify-center items-center text-sm"
-          style={{ height: HEADER_HEIGHT }}
-        >
-          <div className="font-sans">
-            {date.toLocaleString('en-US', {
-              month: 'numeric',
-              day: 'numeric'
-            })}
-          </div>
-          <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
-            {date.toLocaleString('en-US', {
-              weekday: 'short'
-            })}
-          </div>
-        </div>
+      <div className="basis-1  flex flex-col flex-grow min-w-14 justify-center">
         {Array.from({ length: nHours })?.map((_, i) => {
           return (
             <div className="flex flex-col" key={i}>
@@ -223,7 +211,7 @@ const Schedule = ({
     dateIndex: number
     place: SlotPlace
   }) => {
-    const { bgColorString, userColorString, otherColorString } = getColors
+    const { bgColorString, userColorString, allColorString } = getColors
     const othersCount = othersValue?.length
 
     let isCellSelected = userValue
@@ -251,39 +239,33 @@ const Schedule = ({
 
     const bgColor = tinycolor('hsl ' + bgColorString)
     const userColor = tinycolor('hsl ' + userColorString)
-    const otherColor = tinycolor('hsl ' + otherColorString)
+    const allColor = tinycolor('hsl ' + allColorString)
     let slotColor: tinycolor.Instance
     let alpha = 1
 
-    let secondColor: null | string = null
+    const isAll =
+      ((isCurrentlySelected && currentSelection.additive) || isCellSelected) &&
+      othersValue?.length === data.others.length
 
     if (!isCreate) {
-      alpha = hoveringUser === null ? 1 : 0.5
+      alpha = hoveringUser === null ? 1 : 0.3
 
-      if (
-        (isCurrentlySelected || isCellSelected) &&
-        othersValue?.length === data.others.length
-      ) {
-        slotColor = tinycolor
-          .mix(userColor, otherColor, 60)
-          .darken(10)
-          .saturate(100)
-      } else if (
-        (isCellSelected || isCurrentlySelected) &&
-        othersValue?.length > 0
-      ) {
-        slotColor = userColor
-        secondColor = otherColor
-          .setAlpha(othersValue.length / data.others.length)
-          .toHex8String()
-      } else if (isCellSelected || isCurrentlySelected) {
-        slotColor = userColor
-      } else if (othersValue?.length > 0) {
-        slotColor = otherColor
-        slotColor.setAlpha(othersValue.length / data.others.length)
-      } else {
-        slotColor = bgColor
-      }
+      if (isAll) slotColor = allColor
+      else if (isCurrentlySelected || isCellSelected) slotColor = userColor
+      // } else if (
+      //   (isCellSelected || isCurrentlySelected) &&
+      //   othersValue?.length > 0
+      // ) {
+      //   slotColor = userColor
+      //   secondColor = otherColor
+      //     .setAlpha(othersValue.length / data.others.length)
+      //     .toHex8String()
+      // } else if (isCellSelected || isCurrentlySelected) {
+      //   slotColor = userColor
+      // } else if (othersValue?.length > 0) {
+      //   slotColor = otherColor
+      //   slotColor.setAlpha(othersValue.length / data.others.length)
+      else slotColor = bgColor
 
       if (
         (hoveringUser !== null && othersValue?.includes(hoveringUser - 1)) ||
@@ -299,8 +281,9 @@ const Schedule = ({
     }
 
     if (isCurrentlySelected)
-      if (currentSelection.additive) slotColor.lighten(12)
-      else slotColor.setAlpha(0.5)
+      if (currentSelection.additive) {
+      } //slotColor.lighten(12)
+      else slotColor.setAlpha(0.3)
 
     if (!isCellSelected && isCurrentlySelected && !currentSelection.additive)
       slotColor = bgColor
@@ -309,15 +292,19 @@ const Schedule = ({
 
     timeDifference / 60
 
+    const cell_height = CELL_HEIGHT // = data.slotLength === 60 ? CELL_HEIGHT : CELL_HEIGHT / 2
+
     return (
       <div
         key={`time-cell-${dateIndex}-${timeIndex}`}
-        className={`flex flex-grow w-full justify-center items-center 
+        className={`schedule-slot flex flex-grow w-full justify-center items-center 
           ${place.micro === Place.FIRST ? 'pt-0' : place.micro === Place.LAST ? 'pb-0.5' : place.micro === Place.ONLY ? 'pb-0.5' : ''}
         `}
         style={{
-          height: data.slotLength === 60 ? CELL_HEIGHT : CELL_HEIGHT / 2
+          height: cell_height
         }}
+        data-user-value={JSON.stringify(userValue)}
+        data-others-value={JSON.stringify(othersValue)}
         onMouseDown={() => {
           setIsMouseDown(true)
           setCurrentSelection({
@@ -328,7 +315,7 @@ const Schedule = ({
             additive: !isCellSelected
           })
         }}
-        onMouseEnter={() => {
+        onMouseOver={() => {
           if (isMouseDown) {
             setCurrentSelection({
               range: {
@@ -342,22 +329,21 @@ const Schedule = ({
             })
           }
 
-          if (othersCount > 0 || isCellSelected) {
-            let users = []
-            if (isCellSelected) users.push(-1)
-            users = users.concat(othersValue)
-            setSlotUsers(users)
-          } else setSlotUsers(null)
+          // if (othersCount > 0 || isCellSelected) {
+          //   let slotUsers = Array.from({ length: data.others.length + 1 }).map(
+          //     _ => false
+          //   )
+          //   if (isCellSelected) slotUsers[0] = true
+          //   othersValue.forEach(otherId => (slotUsers[otherId + 1] = true))
+          //   setSlotUsers(slotUsers)
+          // } else setSlotUsers(null)
         }}
-        // onMouseLeave={() => {
-        //   setSlotUsers(null)
-        // }}
         onMouseUp={() => {
           setIsMouseDown(false)
         }}
       >
         <div
-          className="w-full h-full bg-background overflow-hidden"
+          className="w-full h-full mx-0.5 bg-background overflow-hidden"
           style={(() => {
             switch (place.macro) {
               case Place.FIRST:
@@ -376,39 +362,112 @@ const Schedule = ({
           <div
             className="w-full h-full flex flex-row justify-center items-center gap-x-2"
             style={{
-              // backgroundColor: slotColorString,
               opacity: alpha,
               background: slotColorString
-              // secondColor !== null
-              //   ? `linear-gradient(to right, ${slotColorString} 50%, ${secondColor} 50%)`
-              //   : slotColorString
             }}
           >
-            {Array.from({ length: othersCount }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  width: 4,
-                  height: 4,
-                  backgroundColor: 'red',
-                  borderRadius: 100
-                }}
-              />
-            ))}
+            {!isAll &&
+              othersValue.map((v, i) => {
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      width: cell_height * 0.4,
+                      height: cell_height * 0.4,
+                      backgroundColor: othersColors[v],
+                      borderRadius: 100
+                    }}
+                  ></div>
+                )
+              })}
           </div>
         </div>
       </div>
     )
   }
 
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    const slot = document.querySelector('.schedule-slot')
+    if (!slot) return
+
+    const slot_width = slot.getBoundingClientRect().width
+
+    const slotParent = document.getElementById('slot-parent')
+    if (!slotParent) return
+
+    const rect = slotParent.getBoundingClientRect()
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+      setSlotUsers(null)
+      return
+    }
+
+    const SLOT_HEIGHT = CELL_HEIGHT // data.slotLength === 60 ? CELL_HEIGHT : CELL_HEIGHT / 2
+
+    const dateIndex = Math.floor(x / slot_width)
+    const timeIndex = Math.floor(y / SLOT_HEIGHT)
+
+    if (
+      dateIndex < 0 ||
+      dateIndex >= data.dates.length ||
+      timeIndex < 0 ||
+      timeIndex >= data.userSchedule[0].length
+    ) {
+      setSlotUsers(null)
+      return
+    }
+
+    const userValue = data.userSchedule[dateIndex][timeIndex]
+    const othersValue = data.othersSchedule[dateIndex][timeIndex]
+
+    if (othersValue.length > 0 || userValue) {
+      let slotUsers = Array.from({ length: data.others.length + 1 }).map(
+        _ => false
+      )
+      if (userValue) slotUsers[0] = true
+      othersValue.forEach((otherId: number) => (slotUsers[otherId + 1] = true))
+      setSlotUsers(slotUsers)
+    } else {
+      setSlotUsers(null)
+    }
+  }
+
   return (
-    <div>
-      <div className="flex flex-col p-6 bg-card shadow-xl rounded-lg select-none mx-auto">
-        <div className="flex flex-row pb-2 overflow-x-scroll">
+    <div
+      className="flex flex-col p-6 bg-card shadow-xl rounded-lg select-none"
+      id="schedule-card"
+      onMouseMove={handleMouseMove}
+    >
+      <div className="flex flex-col pb-2 overflow-x-scroll">
+        <div className="flex flex-row " style={{ marginLeft: TIME_COL_WIDTH }}>
+          {data.dates.map((date, i) => (
+            <div
+              key={i}
+              className="flex flex-grow flex-col justify-center items-center text-sm"
+              style={{ height: HEADER_HEIGHT }}
+            >
+              <div className="font-sans">
+                {date.toLocaleString('en-US', {
+                  month: 'numeric',
+                  day: 'numeric'
+                })}
+              </div>
+              <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
+                {date.toLocaleString('en-US', {
+                  weekday: 'short'
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-row">
           <div
-            className="flex flex-col min-w-14 justify-between mx-2 font-time text-sm text-right"
+            className="flex flex-col justify-between font-time text-sm text-right"
             style={{
-              marginTop: HEADER_HEIGHT
+              width: TIME_COL_WIDTH,
+              paddingRight: 12
             }}
           >
             {timeDifference > 0 &&
@@ -434,40 +493,42 @@ const Schedule = ({
               })}
           </div>
 
-          {data.dates.map((date, dateIndex) => (
-            <DayColumn
-              key={`day-column-${dateIndex}`}
-              date={date}
-              dateIndex={dateIndex}
-              dayUser={data.userSchedule[dateIndex]}
-              dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
-            />
-          ))}
+          <div className="flex flex-row flex-1 " id="slot-parent">
+            {data.dates.map((date, dateIndex) => (
+              <DayColumn
+                key={`day-column-${dateIndex}`}
+                date={date}
+                dateIndex={dateIndex}
+                dayUser={data.userSchedule[dateIndex]}
+                dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
+              />
+            ))}
+          </div>
         </div>
-        {timeDifference > 0 ? (
-          <div className="flex flex-row justify-end pt-2">
-            <Button
-              onClick={() => {
-                setData({
-                  ...data,
-                  userSchedule: [...data.userSchedule].map(day =>
-                    day.map(_ => false)
-                  )
-                })
-              }}
-              variant={'destructive'}
-              className="gap-x-2 items-center"
-            >
-              <FontAwesomeIcon icon={faEraser} />
-              Clear
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-row justify-center mt-4">
-            No time selected.
-          </div>
-        )}
       </div>
+      {timeDifference > 0 ? (
+        <div className="flex flex-row justify-end pt-2">
+          <Button
+            onClick={() => {
+              setData({
+                ...data,
+                userSchedule: [...data.userSchedule].map(day =>
+                  day.map(_ => false)
+                )
+              })
+            }}
+            variant={'destructive'}
+            className="gap-x-2 items-center"
+          >
+            <FontAwesomeIcon icon={faEraser} />
+            Clear
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-row justify-center mt-4">
+          No time selected.
+        </div>
+      )}
     </div>
   )
 }

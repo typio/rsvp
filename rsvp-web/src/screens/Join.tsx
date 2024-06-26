@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import useWebSocket, { ReadyState } from 'react-use-websocket'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faShare, faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
+import { faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,13 +10,15 @@ import { Input } from '@/components/ui/input'
 import Schedule from '.././components/schedule'
 import { h24ToTimeRange } from '@/utils'
 import { ScheduleData } from '@/types'
+import tinycolor from 'tinycolor2'
+import { Screen } from '@/App'
 
 const Join = ({
   setScreen,
   setWSMode
 }: {
-  setScreen: React.Dispatch<string>
-  setWSMode: React.Dispatch<any>
+  setScreen: React.Dispatch<Screen>
+  setWSMode: React.Dispatch<ReadyState>
 }) => {
   const room_uid = window.location.pathname.slice(1)
 
@@ -29,7 +31,12 @@ const Join = ({
     shouldReconnect: () => true
   })
 
-  const [slotUsers, setSlotUsers] = useState<null | number[]>(null)
+  const [slotUsers, setSlotUsers] = useState<null | boolean[]>(null)
+
+  const [scheduleData, setScheduleData] = useState<ScheduleData>()
+  const [userName, setUserName] = useState<String>('')
+  const [isOwner, setIsOwner] = useState(false)
+  const [hoveringUser, setHoveringUser] = useState<null | number>(null)
 
   useEffect(() => {
     if (lastMessage !== null) {
@@ -37,19 +44,22 @@ const Join = ({
 
       switch (message.message_type) {
         case 'editEventName':
-          setScheduleData(p => ({
-            ...p,
+          setScheduleData({
+            ...scheduleData,
             eventName: message.payload
-          }))
+          })
           break
         case 'editUserName':
-          setScheduleData(p => ({ ...p, others: message.payload }))
+          setScheduleData({
+            ...scheduleData,
+            others: message.payload
+          })
           break
         case 'editSchedule':
-          setScheduleData(p => ({
-            ...p,
+          setScheduleData({
+            ...scheduleData,
             othersSchedule: message.payload
-          }))
+          })
           break
         default:
           console.log('Unknown WebSocket message:', message)
@@ -57,17 +67,9 @@ const Join = ({
     }
   }, [lastMessage])
 
-  const connectionStatus = {
-    [ReadyState.CONNECTING]: 'Connecting',
-    [ReadyState.OPEN]: 'Open',
-    [ReadyState.CLOSING]: 'Closing',
-    [ReadyState.CLOSED]: 'Closed',
-    [ReadyState.UNINSTANTIATED]: 'Uninstantiated'
-  }[readyState]
-
   useEffect(() => {
-    setWSMode(connectionStatus)
-  }, [connectionStatus])
+    setWSMode(readyState)
+  }, [readyState])
 
   useEffect(() => {
     if (isInitialRender) {
@@ -81,11 +83,20 @@ const Join = ({
       setIsInitialRender(false)
     }
   }, [])
+  useEffect(() => {
+    // if (loading || !socket || socket.readyState != socket.OPEN) return
 
-  const [scheduleData, setScheduleData] = useState<ScheduleData>()
-  const [userName, setUserName] = useState<String>('')
-  const [isOwner, setIsOwner] = useState(false)
-  const [hoveringUser, setHoveringUser] = useState<null | number>(null)
+    sendMessage(
+      // socket.send(
+      JSON.stringify({
+        message_type: 'editSchedule',
+        payload: {
+          user_name: userName,
+          user_schedule: scheduleData?.userSchedule
+        }
+      })
+    )
+  }, [scheduleData?.userSchedule])
 
   const authenticate = async (): Promise<boolean> => {
     let result = await fetch(`http://localhost:3632/api/auth`, {
@@ -132,7 +143,7 @@ const Join = ({
       }).then(res => {
         if (res.ok) {
           history.pushState({ page: 1 }, 'room', '/')
-          setScreen('create')
+          setScreen(Screen.CREATE)
         }
       })
     } catch (e) {
@@ -140,24 +151,16 @@ const Join = ({
     }
   }
 
-  useEffect(() => {
-    // if (loading || !socket || socket.readyState != socket.OPEN) return
-
-    sendMessage(
-      // socket.send(
-      JSON.stringify({
-        message_type: 'editSchedule',
-        payload: {
-          user_name: userName,
-          user_schedule: scheduleData?.userSchedule
-        }
-      })
-    )
-  }, [scheduleData?.userSchedule])
-
   const shareRoom = () => {
     alert(window.location)
   }
+
+  if (scheduleData === undefined) return
+
+  const hues = [0, 110, 185, 245, 300]
+  const othersColors = Array.from({ length: scheduleData.others.length }).map(
+    (_, i) => `hsl(${hues[i]}, 100%, 65%)`
+  )
 
   if (loading)
     return (
@@ -195,7 +198,7 @@ const Join = ({
     <main className="gap-x-8">
       <div className="flex flex-col gap-2">
         <div className="flex flex-col gap-y-2 mb-4 bg-card shadow-xl p-4 rounded-md">
-          <div className="flex flex-row gap-x-4 items-end ">
+          <div className="flex flex-row gap-x-4 items-end">
             {isOwner ? (
               <div className="flex flex-col gap-y-1 flex-1">
                 <label className="text-sm font-medium text-muted-foreground">
@@ -253,39 +256,52 @@ const Join = ({
           </div>
         </div>
 
-        <div className="flex flex-row justify-between">
-          <div className="flex flex-row gap-x-2 items-center">
+        <div className="flex flex-row justify-between ">
+          <div
+            className="flex flex-row gap-x-2 items-center duration-75"
+            style={{
+              opacity:
+                (hoveringUser != null && hoveringUser != 0) ||
+                (slotUsers !== null && !slotUsers[0])
+                  ? 0
+                  : 1
+            }}
+          >
             <div
-              className={`opacity-${(hoveringUser != null && hoveringUser != 0) || slotUsers?.at(0) !== -1 ? '50' : '100'}`}
               onMouseEnter={() => setHoveringUser(0)}
               onMouseLeave={() => setHoveringUser(null)}
             >
               You
             </div>
-            <div
-              className={`w-3 h-3 rounded bg-primary opacity-${hoveringUser != null && hoveringUser != 0 ? '50' : '100'}`}
-            />
+            <div className={`w-3 h-3 rounded bg-secondary`} />
           </div>
 
-          {scheduleData?.others.length > 0 && (
-            <div className="flex flex-row gap-x-2 items-center">
-              <div className="flex flex-row gap-x-4 items-center">
-                {scheduleData?.others?.map((user: string, i) => (
-                  <div
-                    key={i}
-                    className={`opacity-${hoveringUser != null && hoveringUser != i + 1 ? '50' : '100'}`}
-                    onMouseEnter={() => setHoveringUser(i + 1)}
-                    onMouseLeave={() => setHoveringUser(null)}
-                  >
-                    {user?.length > 0 ? user : `User ${i}`}
-                  </div>
-                ))}
-              </div>
+          <div className="flex flex-row gap-x-4 items-center">
+            {scheduleData?.others?.map((user: string, i) => (
               <div
-                className={`w-3 h-3 rounded bg-secondary opacity-${hoveringUser != null && hoveringUser == 0 ? '50' : '100'}`}
-              />
-            </div>
-          )}
+                key={i}
+                className={`flex flex-row gap-x-2 items-center duration-75`}
+                style={{
+                  opacity:
+                    (hoveringUser != null && hoveringUser != i + 1) ||
+                    (slotUsers !== null && !slotUsers[i + 1])
+                      ? 0
+                      : 1
+                }}
+                onMouseEnter={() => setHoveringUser(i + 1)}
+                onMouseLeave={() => setHoveringUser(null)}
+              >
+                <div>{user?.length > 0 ? user : `User ${i}`}</div>
+
+                <div
+                  className={`w-3 h-3 rounded-full`}
+                  style={{
+                    backgroundColor: othersColors[i]
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {scheduleData && scheduleData.dates.length > 0 && (
@@ -295,6 +311,7 @@ const Join = ({
             isCreate={false}
             hoveringUser={hoveringUser}
             setSlotUsers={setSlotUsers}
+            othersColors={othersColors}
           />
         )}
 

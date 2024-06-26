@@ -6,8 +6,16 @@ import {
   faQuestion
 } from '@fortawesome/free-solid-svg-icons'
 import { faGithubAlt } from '@fortawesome/free-brands-svg-icons'
+import { ReadyState } from 'react-use-websocket'
+import { Screen } from './App'
 
-const Footer = ({ screen, WSMode }) => {
+const Footer = ({
+  screen,
+  WSMode
+}: {
+  screen: Screen
+  WSMode: ReadyState | null
+}) => {
   return (
     <footer className="text-sm text-primary font-medium text-gold grid grid-cols-3 justify-between items-end select-none">
       <div className="grid grid-flow-row-dense grid-cols-2 grid-rows-2 gap-2 w-fit">
@@ -42,8 +50,8 @@ const Footer = ({ screen, WSMode }) => {
       </div>
 
       <div className="flex flex-row justify-center">
-        {screen === 'join' &&
-          (WSMode === 'Open' ? (
+        {screen === Screen.JOIN &&
+          (WSMode === ReadyState.OPEN ? (
             <div className="flex flex-row gap-x-2 items-center">
               <svg className="w-4 h-4" viewBox="0 0 10 10">
                 <circle

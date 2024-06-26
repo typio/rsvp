@@ -213,6 +213,9 @@ async fn handle_websocket_message(
                 users: Vec<String>,
             }
 
+            // TODO: only allow current limit of 6 users per room (including owner)
+            // send an error message back that creates a toast
+
             // If user isn't in room add them
             let _ = sqlx::query!(
                 r#"
@@ -670,6 +673,8 @@ async fn create_room(mut req: Request<State>) -> tide::Result {
         }
     }
 
+    // TODO: while this conflicts with existing uid make a new one,
+    // create a process that deletes expired rooms
     let room_uid = generate_id(req.peer_addr().unwrap_or(""), 4);
 
     let dates = json!(req_body.dates);

@@ -19,6 +19,7 @@ import Schedule from '.././components/schedule'
 import { ToggleGroup, ToggleGroupItem } from '.././components/ui/toggle-group'
 import { h12To24 } from '@/utils'
 import { ScheduleData } from '@/types'
+import { Screen } from '@/App'
 
 const storedCreateState = ((storedStr: string | null) =>
   typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
@@ -203,7 +204,7 @@ const CreateOptions = ({
   )
 }
 
-const Create = ({ setScreen }: { setScreen: React.Dispatch<string> }) => {
+const Create = ({ setScreen }: { setScreen: React.Dispatch<Screen> }) => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>({
     eventName: storedCreateState?.eventName ?? 'My Event',
     dates:
@@ -256,7 +257,7 @@ const Create = ({ setScreen }: { setScreen: React.Dispatch<string> }) => {
     }).then(res => {
       res.json().then(resJSON => {
         history.pushState({ page: 1 }, 'room', `/${resJSON.room_uid}`)
-        setScreen('join')
+        setScreen(Screen.JOIN)
       })
     })
   }
