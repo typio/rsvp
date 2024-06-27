@@ -212,8 +212,6 @@ const Schedule = ({
     place: SlotPlace
   }) => {
     const { bgColorString, userColorString, allColorString } = getColors
-    const othersCount = othersValue?.length
-
     let isCellSelected = userValue
     let isCurrentlySelected = false
 
@@ -243,14 +241,19 @@ const Schedule = ({
     let slotColor: tinycolor.Instance
     let alpha = 1
 
-    const isAll =
+    const cellSelectedByAll =
       ((isCurrentlySelected && currentSelection.additive) || isCellSelected) &&
       othersValue?.length === data.others.length
+
+    const cellSelectedByHoveringUser =
+      hoveringUser && othersValue?.includes(hoveringUser - 1)
 
     if (!isCreate) {
       alpha = hoveringUser === null ? 1 : 0.3
 
-      if (isAll) slotColor = allColor
+      if (cellSelectedByHoveringUser && hoveringUser >= 1)
+        slotColor = tinycolor(othersColors[hoveringUser - 1])
+      else if (cellSelectedByAll) slotColor = allColor
       else if (isCurrentlySelected || isCellSelected) slotColor = userColor
       // } else if (
       //   (isCellSelected || isCurrentlySelected) &&
@@ -267,10 +270,7 @@ const Schedule = ({
       //   slotColor.setAlpha(othersValue.length / data.others.length)
       else slotColor = bgColor
 
-      if (
-        (hoveringUser !== null && othersValue?.includes(hoveringUser - 1)) ||
-        (hoveringUser === 0 && isCellSelected)
-      )
+      if (cellSelectedByHoveringUser || (hoveringUser === 0 && isCellSelected))
         alpha = 1
     } else {
       if (isCellSelected || isCurrentlySelected) {
@@ -292,8 +292,6 @@ const Schedule = ({
 
     timeDifference / 60
 
-    const cell_height = CELL_HEIGHT // = data.slotLength === 60 ? CELL_HEIGHT : CELL_HEIGHT / 2
-
     return (
       <div
         key={`time-cell-${dateIndex}-${timeIndex}`}
@@ -301,7 +299,7 @@ const Schedule = ({
           ${place.micro === Place.FIRST ? 'pt-0' : place.micro === Place.LAST ? 'pb-0.5' : place.micro === Place.ONLY ? 'pb-0.5' : ''}
         `}
         style={{
-          height: cell_height
+          height: CELL_HEIGHT
         }}
         data-user-value={JSON.stringify(userValue)}
         data-others-value={JSON.stringify(othersValue)}
@@ -366,14 +364,15 @@ const Schedule = ({
               background: slotColorString
             }}
           >
-            {!isAll &&
+            {!cellSelectedByAll &&
+              !cellSelectedByHoveringUser &&
               othersValue.map((v, i) => {
                 return (
                   <div
                     key={i}
                     style={{
-                      width: cell_height * 0.4,
-                      height: cell_height * 0.4,
+                      width: CELL_HEIGHT / 3,
+                      height: CELL_HEIGHT / 3,
                       backgroundColor: othersColors[v],
                       borderRadius: 100
                     }}
@@ -387,6 +386,11 @@ const Schedule = ({
   }
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isMouseDown) {
+      setSlotUsers(null)
+      return
+    }
+
     const slot = document.querySelector('.schedule-slot')
     if (!slot) return
 
@@ -404,10 +408,8 @@ const Schedule = ({
       return
     }
 
-    const SLOT_HEIGHT = CELL_HEIGHT // data.slotLength === 60 ? CELL_HEIGHT : CELL_HEIGHT / 2
-
     const dateIndex = Math.floor(x / slot_width)
-    const timeIndex = Math.floor(y / SLOT_HEIGHT)
+    const timeIndex = Math.floor(y / CELL_HEIGHT)
 
     if (
       dateIndex < 0 ||

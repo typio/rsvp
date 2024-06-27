@@ -283,6 +283,8 @@ async fn handle_websocket_message(
                 let _ = wsc
                     .send_json(&WSMessage {
                         message_type: String::from("editSchedule"),
+                        // TODO: Change this to a bool array for more efficient rendering on the
+                        // client
                         payload: room_data.others_schedule.into(),
                     })
                     .await;
