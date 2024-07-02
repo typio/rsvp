@@ -144,12 +144,12 @@ async fn main() -> tide::Result<()> {
                                     },
                                     tide_websockets::Message::Pong(_) => {
                                         if let Some(user_uid) = &user_uid {
-                                            println!("Pong from {}", user_uid);
+                                            // println!("Pong from {}", user_uid);
                                         }
                                     },
                                     tide_websockets::Message::Ping(payload) => {
                                         if let Some(user_uid) = &user_uid {
-                                            println!("Ping from {}", user_uid);
+                                            // println!("Ping from {}", user_uid);
                                         if let Err(_) = wsc.send(tide_websockets::Message::Pong(payload)).await {
                                             break;
                                         }

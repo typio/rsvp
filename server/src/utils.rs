@@ -48,3 +48,5 @@ pub fn generate_id(ip: &str, len: usize) -> String {
 
     id[..len].to_string()
 }
+
+

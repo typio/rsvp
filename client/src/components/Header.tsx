@@ -1,10 +1,11 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faCalendarCheck } from '@fortawesome/free-solid-svg-icons'
+import { Link } from 'react-router-dom'
 
 const Header = () => (
   <header className="flex flex-row items-center text-primary ">
-    <a
-      href="/"
+    <Link
+      to="/"
       className="flex flex-row gap-x-4 items-center hover:text-primary/80 "
     >
       <FontAwesomeIcon icon={faCalendarCheck} size="2xl" />
@@ -14,7 +15,7 @@ const Header = () => (
           Find a time that's convenient for everyone
         </h2>
       </div>
-    </a>
+    </Link>
   </header>
 )
 

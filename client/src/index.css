@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 211 100% 8%;
+    --foreground: 202 20% 92%;
+    --muted: 212 100% 20%;
+    --muted-foreground: 215.9 25% 40%;
+    --popover: 216.39 100% 11.96%;
+    --popover-foreground: 0 0% 100%;
+    --card: 212 100% 14%;
+    --card-foreground: 0 0% 100%;
+    --border: 216.59 100% 9.04%;
+    --input: 211 100% 12%;
+    --primary: 51 100% 50%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 212 100% 36%;
+    --secondary-foreground: 212 100% 98%;
+    --accent: 174 53% 68%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 95% 60%;
+    --destructive-foreground: 0 100% 92%;
+    --ring: 51 100% 50%;
+    --radius: 0.75rem;
+  }
+}
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+@keyframes glowAnimation {
+  0% {
+    color: white;
+    text-shadow:
+      0px 0px 0px var(--user-color),
+      0px 0px 0px var(--user-color),
+      0px 0px 0px var(--user-color),
+      0px 0px 0px var(--bright-user-color);
+  }
+  100% {
+    color: var(--user-color);
+    text-shadow:
+      0px 0px 10px var(--user-color),
+      0px 0px 15px var(--user-color),
+      0px 0px 20px var(--user-color),
+      0px 0px 25px var(--bright-user-color);
+  }
+}
+
+@keyframes glowFadeOut {
+  0% {
+    color: var(--user-color);
+    text-shadow:
+      0px 0px 10px var(--user-color),
+      0px 0px 15px var(--user-color),
+      0px 0px 20px var(--user-color),
+      0px 0px 25px var(--bright-user-color);
+  }
+  100% {
+    color: white;
+    text-shadow:
+      0px 0px 0px var(--user-color),
+      0px 0px 0px var(--user-color),
+      0px 0px 0px var(--user-color),
+      0px 0px 0px var(--bright-user-color);
+  }
+}
+
+@keyframes flameFlicker {
+  0%,
+  100% {
+    text-shadow:
+      0px 0px 10px var(--user-color),
+      0px 0px 15px var(--user-color),
+      0px 0px 20px var(--user-color),
+      0px 0px 25px var(--bright-user-color);
+  }
+  25% {
+    text-shadow:
+      0px 0px 8px var(--user-color),
+      0px 0px 12px var(--user-color),
+      0px 0px 17px var(--user-color),
+      0px 0px 22px var(--bright-user-color);
+  }
+  50% {
+    text-shadow:
+      0px 0px 11px var(--user-color),
+      0px 0px 16px var(--user-color),
+      0px 0px 22px var(--user-color),
+      0px 0px 28px var(--bright-user-color);
+  }
+  75% {
+    text-shadow:
+      0px 0px 9px var(--user-color),
+      0px 0px 13px var(--user-color),
+      0px 0px 18px var(--user-color),
+      0px 0px 24px var(--bright-user-color);
+  }
+}
+
+@keyframes flamePulse {
+  0%,
+  100% {
+    text-shadow:
+      0px 0px 10px var(--user-color),
+      0px 0px 15px var(--user-color),
+      0px 0px 20px var(--user-color),
+      0px 0px 25px var(--bright-user-color);
+  }
+  50% {
+    text-shadow:
+      0px 0px 15px var(--user-color),
+      0px 0px 30px var(--user-color),
+      0px 0px 45px var(--user-color),
+      0px 0px 60px var(--bright-user-color);
+  }
+}

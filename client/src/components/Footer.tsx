@@ -7,25 +7,22 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import { faGithubAlt } from '@fortawesome/free-brands-svg-icons'
 import { ReadyState } from 'react-use-websocket'
-import { Screen } from './App'
+import { Link } from 'react-router-dom'
+import { useWebSocketContext } from '@/contexts/WebSocketContext'
 
-const Footer = ({
-  screen,
-  WSMode
-}: {
-  screen: Screen
-  WSMode: ReadyState | null
-}) => {
+const Footer = () => {
+  const { readyState, roomUid } = useWebSocketContext()
+
   return (
     <footer className="text-sm text-primary font-medium text-gold grid grid-cols-3 justify-between items-end select-none">
       <div className="grid grid-flow-row-dense grid-cols-2 grid-rows-2 gap-2 w-fit">
-        <a
-          className="flex flex-row flex-shrink w-fit gap-2 items-center hover:text-primary/90 "
-          href="/about"
+        <Link
+          to="/about"
+          className="flex flex-row gap-2 items-center hover:text-primary/90 "
         >
           <FontAwesomeIcon icon={faQuestion} />
           <div>about</div>
-        </a>
+        </Link>
         <a
           className="flex flex-row gap-2 items-center hover:text-primary/90 "
           href="mailto:tom@tominomi.com"
@@ -50,8 +47,8 @@ const Footer = ({
       </div>
 
       <div className="flex flex-row justify-center">
-        {screen === Screen.JOIN &&
-          (WSMode === ReadyState.OPEN ? (
+        {roomUid !== null &&
+          (readyState === ReadyState.OPEN ? (
             <div className="flex flex-row gap-x-2 items-center">
               <svg className="w-4 h-4" viewBox="0 0 10 10">
                 <circle

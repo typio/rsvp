@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { NavigateFunction, useNavigate } from 'react-router-dom'
 
 import { addDays, startOfDay } from 'date-fns'
 
@@ -15,11 +16,9 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { DatePickerMultiple } from '@/components/datepicker'
 
-import Schedule from '.././components/schedule'
 import { ToggleGroup, ToggleGroupItem } from '.././components/ui/toggle-group'
-import { h12To24 } from '@/utils'
 import { ScheduleData } from '@/types'
-import { Screen } from '@/App'
+import Schedule, { shareRoom } from '@/components/Schedule'
 
 const storedCreateState = ((storedStr: string | null) =>
   typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
@@ -33,8 +32,10 @@ const CreateOptions = ({
 }: {
   scheduleData: ScheduleData
   setScheduleData: React.Dispatch<ScheduleData>
-  shareRoom: () => any
+  shareRoom: (scheduleData: ScheduleData, navigate: NavigateFunction) => any
 }) => {
+  const navigate = useNavigate()
+
   const [timeInputs, setTimeInputs] = useState({
     from: scheduleData.timeRange.from.hour,
     to: scheduleData.timeRange.to.hour
@@ -81,7 +82,7 @@ const CreateOptions = ({
             />
           </div>
           <Button
-            onClick={shareRoom}
+            onClick={() => shareRoom(scheduleData, navigate)}
             className="flex flex-row gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
           >
             <FontAwesomeIcon icon={faSquareUpRight} />
@@ -204,7 +205,7 @@ const CreateOptions = ({
   )
 }
 
-const Create = ({ setScreen }: { setScreen: React.Dispatch<Screen> }) => {
+const Create = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>({
     eventName: storedCreateState?.eventName ?? 'My Event',
     dates:
@@ -218,7 +219,8 @@ const Create = ({ setScreen }: { setScreen: React.Dispatch<Screen> }) => {
     },
     slotLength: storedCreateState?.slotLength ?? 30,
     userSchedule: storedCreateState?.userSchedule ?? [],
-    othersSchedule: []
+    othersSchedule: [],
+    others: []
   })
 
   useEffect(() => {
@@ -230,37 +232,6 @@ const Create = ({ setScreen }: { setScreen: React.Dispatch<Screen> }) => {
     scheduleData.slotLength,
     scheduleData.userSchedule
   ])
-
-  const shareRoom = () => {
-    let req = JSON.stringify({
-      event_name: scheduleData.eventName,
-      dates: scheduleData.dates,
-      time_range: {
-        from_hour:
-          h12To24(
-            Number(scheduleData.timeRange.from.hour),
-            scheduleData.timeRange.from.isAM
-          ) || 0,
-        to_hour:
-          h12To24(
-            Number(scheduleData.timeRange.to.hour),
-            scheduleData.timeRange.to.isAM
-          ) || 0
-      },
-      slot_length: scheduleData.slotLength,
-      schedule: scheduleData.userSchedule
-    })
-    fetch('http://localhost:3632/api/rooms', {
-      method: 'POST',
-      body: req,
-      credentials: 'include'
-    }).then(res => {
-      res.json().then(resJSON => {
-        history.pushState({ page: 1 }, 'room', `/${resJSON.room_uid}`)
-        setScreen(Screen.JOIN)
-      })
-    })
-  }
 
   return (
     <main className="gap-x-8 w-full max-w-3xl mx-auto">
@@ -286,9 +257,11 @@ const Create = ({ setScreen }: { setScreen: React.Dispatch<Screen> }) => {
             {scheduleData.dates.length > 0 && (
               <Schedule
                 data={scheduleData}
-                setData={setScheduleData}
                 isCreate={true}
                 hoveringUser={null}
+                setHoveredSlotUsers={() => {}}
+                othersColors={[]}
+                editSchedule={newSchedule => setScheduleData(newSchedule)}
               />
             )}
           </div>
