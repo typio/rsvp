@@ -8,11 +8,11 @@
     --foreground: 202 20% 92%;
     --muted: 212 100% 20%;
     --muted-foreground: 215.9 25% 40%;
-    --popover: 216.39 100% 11.96%;
+    --popover: 216 100% 11.96%;
     --popover-foreground: 0 0% 100%;
     --card: 212 100% 14%;
     --card-foreground: 0 0% 100%;
-    --border: 216.59 100% 9.04%;
+    --border: 216 100% 25%;
     --input: 211 100% 12%;
     --primary: 51 100% 50%;
     --primary-foreground: 0 0% 0%;
@@ -34,6 +34,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes wiggle {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(2px, 1px);
+  }
+  50% {
+    transform: translate(-3px, -1px);
+  }
+  75% {
+    transform: translate(3px, -1px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.wiggle {
+  animation: wiggle 0.2s ease infinite;
+}
+
 @keyframes glowAnimation {
   0% {
     color: white;

@@ -11,7 +11,7 @@ export type ScheduleSelectionContextType = {
     isSelected: boolean
   ) => void
   handleMouseMoveSchedule: (event: React.MouseEvent<HTMLDivElement>) => void
-  handleMouseUpSchedule: () => void
+  // handleMouseUpSchedule: (event: React.MouseEvent<HTMLDivElement>) => void
   applySelection: (selection: Selection) => void
 }
 
@@ -56,7 +56,7 @@ export const useScheduleSelection = (
       return
     }
 
-    const slotWidth = scheduleRect.width / initialData.dates.length
+    const slotWidth = scheduleRect.width / initialData.dates.dates.length
     const slotHeight = scheduleRect.height / slotsPerColumn
 
     const dateIndex = Math.floor(x / slotWidth)
@@ -65,7 +65,7 @@ export const useScheduleSelection = (
     if (
       !isCreate &&
       (dateIndex < 0 ||
-        dateIndex >= initialData.dates.length ||
+        dateIndex >= initialData.dates.dates.length ||
         timeIndex < 0 ||
         timeIndex >= initialData.userSchedule[0].length)
     ) {
@@ -118,9 +118,15 @@ export const useScheduleSelection = (
     })
   }
 
-  const handleMouseUpSchedule = () => {
-    setIsMouseDown(false)
-  }
+  // const handleMouseUpSchedule = () => {
+  //   setIsMouseDown(false)
+  //
+  //   applySelection(currentSelection)
+  //   setCurrentSelection({
+  //     range: null,
+  //     additive: currentSelection.additive
+  //   })
+  // }
 
   const applySelection = (selection: Selection) => {
     if (selection.range == null) return
@@ -151,7 +157,7 @@ export const useScheduleSelection = (
     isMouseDown,
     handleMouseDownSlot,
     handleMouseMoveSchedule,
-    handleMouseUpSchedule,
+    // handleMouseUpSchedule,
     applySelection
   }
 }

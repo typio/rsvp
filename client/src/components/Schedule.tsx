@@ -16,6 +16,7 @@ import {
   useScheduleContext
 } from '@/contexts/ScheduleContext'
 import { Colors } from '@/colors'
+import { DAYS_OF_WEEK, DaySelectMode } from './DateSelect'
 
 const TIME_COL_WIDTH = 64
 const HEADER_HEIGHT = 64
@@ -89,7 +90,7 @@ const Schedule = ({
   data: ScheduleData
   editSchedule: (newSchedule: ScheduleData) => void
   hoveringUser: number | null
-  setHoveredSlotUsers: (arg0: number | null) => void
+  setHoveredSlotUsers: (arg0: any) => void
 }) => {
   const fromHour24 = convertTo24Hour(
     data.timeRange.from.hour,
@@ -142,14 +143,13 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
     data,
     editSchedule,
     currentSelection,
-    handleMouseMoveSchedule,
-    handleMouseUpSchedule
+    handleMouseMoveSchedule
   } = useScheduleContext()
 
   useEffect(() => {
     const newData = {
       ...data,
-      userSchedule: data.dates.map((_, dayIndex) =>
+      userSchedule: data.dates.dates.map((_, dayIndex) =>
         Array.from({ length: time.slotsPerColumn ?? 0 }).map(
           (_, timeIndex) => data.userSchedule?.[dayIndex]?.[timeIndex] ?? false
         )
@@ -168,33 +168,50 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
       }}
     >
       <div className="flex flex-col pb-2 overflow-x-scroll">
-        <div className="flex flex-row " style={{ marginLeft: TIME_COL_WIDTH }}>
-          {data.dates.map((date, i) => (
-            <div
-              key={i}
-              className="flex flex-grow flex-col justify-center items-center text-sm"
-              style={{ height: HEADER_HEIGHT }}
-            >
-              <div className="font-sans">
-                {date.toLocaleString('en-US', {
-                  month: 'numeric',
-                  day: 'numeric'
-                })}
-              </div>
-              <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
-                {date.toLocaleString('en-US', {
-                  weekday: 'short'
-                })}
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-row" style={{ marginLeft: TIME_COL_WIDTH }}>
+          {data.dates.mode === DaySelectMode.Dates
+            ? data.dates.dates.map((dateString, i) => {
+                const date = new Date(dateString)
+
+                return (
+                  <div
+                    key={i}
+                    className="flex flex-grow flex-col justify-center items-center text-sm"
+                    style={{ height: HEADER_HEIGHT }}
+                  >
+                    <>
+                      <div className="font-sans">
+                        {date.toLocaleString('en-US', {
+                          month: 'numeric',
+                          day: 'numeric'
+                        })}
+                      </div>
+                      <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
+                        {date.toLocaleString('en-US', {
+                          weekday: 'short'
+                        })}
+                      </div>
+                    </>
+                  </div>
+                )
+              })
+            : data.dates.dates.map(dayN => (
+                <div
+                  key={dayN}
+                  className="flex flex-row flex-grow justify-center items-center font-sans"
+                  style={{ height: HEADER_HEIGHT }}
+                >
+                  {DAYS_OF_WEEK.three_letter_abbrv[dayN]}
+                </div>
+              ))}
         </div>
         <div className="flex flex-row">
           <div
             className="flex flex-col justify-between font-time text-sm text-right"
             style={{
               width: TIME_COL_WIDTH,
-              paddingRight: 12
+              paddingRight: 12,
+              minHeight: (time.timeDifference / 60) * CELL_HEIGHT
             }}
           >
             {time.timeDifference > 0 &&
@@ -220,12 +237,8 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
               })}
           </div>
 
-          <div
-            className="flex flex-row flex-1 gap-x-1"
-            id="slot-parent"
-            onMouseUp={handleMouseUpSchedule}
-          >
-            {data.dates.map((_, dateIndex) => (
+          <div className="flex flex-row flex-1 gap-x-1" id="slot-parent">
+            {data.dates.dates.map((_, dateIndex) => (
               <DayColumn
                 key={`day-column-${dateIndex}`}
                 isCreate={isCreate}
@@ -344,7 +357,9 @@ const Slot = ({
     <div
       className="schedule-slot flex flex-grow w-full justify-center items-center"
       style={{ height: CELL_HEIGHT }}
-      onMouseDown={() => handleMouseDownSlot(dateIndex, timeIndex, isSelected)}
+      onMouseDown={() => {
+        handleMouseDownSlot(dateIndex, timeIndex, isSelected)
+      }}
     >
       <div className="relative w-full h-full bg-background overflow-hidden">
         <div

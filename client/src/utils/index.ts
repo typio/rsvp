@@ -1,5 +1,5 @@
+import { H12Time, H24TimeRange } from '@/types'
 import { useEffect, useState } from 'react'
-import { H12Time, H24TimeRange } from './types'
 
 export const h12To24 = (hour: number, isAM: boolean) => hour + (isAM ? 0 : 12)
 export const h24To12 = (hour: number): H12Time => {

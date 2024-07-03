@@ -14,11 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { DatePickerMultiple } from '@/components/datepicker'
 
 import { ToggleGroup, ToggleGroupItem } from '.././components/ui/toggle-group'
 import { ScheduleData } from '@/types'
 import Schedule, { shareRoom } from '@/components/Schedule'
+import { DateSelect, DaySelectMode } from '@/components/DateSelect'
 
 const storedCreateState = ((storedStr: string | null) =>
   typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
@@ -90,13 +90,23 @@ const CreateOptions = ({
           </Button>
         </div>
         <div className="flex flex-row flex-wrap justify-around gap-4 items-center">
-          <DatePickerMultiple
-            dates={scheduleData.dates}
-            setDates={newDates => {
-              setScheduleData({ ...scheduleData, dates: newDates })
-            }}
-            className="w-80"
-          />
+          <div className="flex flex-row gap-4 items-center">
+            <DateSelect
+              mode={DaySelectMode.Dates}
+              dates={scheduleData.dates}
+              setDates={newDates => {
+                setScheduleData({ ...scheduleData, dates: newDates })
+              }}
+            />
+            <div className="text-muted-foreground">or</div>
+            <DateSelect
+              mode={DaySelectMode.DaysOfWeek}
+              dates={scheduleData.dates}
+              setDates={newDates => {
+                setScheduleData({ ...scheduleData, dates: newDates })
+              }}
+            />
+          </div>
 
           <div className="flex flex-col gap-y-2 mr-4">
             <div className="flex flex-row items-center justify-end gap-x-4 ">
@@ -208,11 +218,14 @@ const CreateOptions = ({
 const Create = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>({
     eventName: storedCreateState?.eventName ?? 'My Event',
-    dates:
-      storedCreateState?.dates.map((d: string) => new Date(d)) ??
-      Array.from({ length: 7 }).map((_, i) =>
-        addDays(startOfDay(new Date()), i)
-      ),
+    dates: {
+      mode: storedCreateState?.dates?.mode ?? DaySelectMode.Dates,
+      dates:
+        storedCreateState?.dates?.dates ??
+        Array.from({ length: 7 }).map((_, i) =>
+          addDays(startOfDay(new Date()), i).toDateString()
+        )
+    },
     timeRange: storedCreateState?.timeRange ?? {
       from: { hour: '9', isAM: true },
       to: { hour: '5', isAM: false }
@@ -254,7 +267,7 @@ const Create = () => {
               shareRoom={shareRoom}
             />
 
-            {scheduleData.dates.length > 0 && (
+            {scheduleData.dates.dates.length > 0 && (
               <Schedule
                 data={scheduleData}
                 isCreate={true}
