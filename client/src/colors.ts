@@ -1,4 +1,5 @@
 export const Colors = {
+  bgColor: 'hsl(212, 100%, 0%)',
   userColor: 'hsl(212, 100%, 36%)',
   othersColors: [
     'hsl(0, 100%, 65%)',

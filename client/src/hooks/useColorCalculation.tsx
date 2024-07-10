@@ -1,6 +1,5 @@
 import { Colors } from '@/colors'
 import { Selection } from '@/components/Schedule'
-import { useMemo } from 'react'
 import tinycolor from 'tinycolor2'
 
 export type SlotColorResult = {
@@ -10,7 +9,6 @@ export type SlotColorResult = {
 
 export type ColorCalculationContextType = {
   slotColors: {
-    bgColorString: string
     userColorString: string
     allColorString: string
   }
@@ -30,18 +28,10 @@ export const useColorCalculation = (
   hoveringUser: number | null,
   others: string[]
 ): ColorCalculationContextType => {
-  const slotColors = useMemo(() => {
-    const bgColorString = window
-      .getComputedStyle(document.documentElement)
-      .getPropertyValue('--background')
-    const userColorString = window
-      .getComputedStyle(document.documentElement)
-      .getPropertyValue('--secondary')
-    const allColorString = window
-      .getComputedStyle(document.documentElement)
-      .getPropertyValue('--primary')
-    return { bgColorString, userColorString, allColorString }
-  }, [])
+  const slotColors = {
+    userColorString: Colors.userColor,
+    allColorString: Colors.allColor
+  }
 
   const calculateCreateSlotColor = (
     isSelected: boolean,

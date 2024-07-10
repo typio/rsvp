@@ -11,7 +11,6 @@ export type ScheduleSelectionContextType = {
     isSelected: boolean
   ) => void
   handleMouseMoveSchedule: (event: React.MouseEvent<HTMLDivElement>) => void
-  // handleMouseUpSchedule: (event: React.MouseEvent<HTMLDivElement>) => void
   applySelection: (selection: Selection) => void
 }
 
@@ -48,16 +47,22 @@ export const useScheduleSelection = (
       .getElementById('slot-parent')
       ?.getBoundingClientRect()
     if (!scheduleRect) return
-    const x = event.clientX - scheduleRect.left
-    const y = event.clientY - scheduleRect.top
 
-    if (x < 0 || y < 0 || x > scheduleRect.width || y > scheduleRect.height) {
+    const slotColumnRect = document
+      .getElementById('slot-column')
+      ?.getBoundingClientRect()
+    if (!slotColumnRect) return
+
+    const x = event.clientX - scheduleRect.left
+    const y = event.clientY - slotColumnRect.top
+
+    if (x < 0 || y < 0 || x > scheduleRect.width || y > slotColumnRect.height) {
       setHoveredSlotUsers(null)
       return
     }
 
     const slotWidth = scheduleRect.width / initialData.dates.dates.length
-    const slotHeight = scheduleRect.height / slotsPerColumn
+    const slotHeight = slotColumnRect.height / slotsPerColumn
 
     const dateIndex = Math.floor(x / slotWidth)
     const timeIndex = Math.floor(y / slotHeight)
@@ -117,16 +122,6 @@ export const useScheduleSelection = (
       additive: !isSelected
     })
   }
-
-  // const handleMouseUpSchedule = () => {
-  //   setIsMouseDown(false)
-  //
-  //   applySelection(currentSelection)
-  //   setCurrentSelection({
-  //     range: null,
-  //     additive: currentSelection.additive
-  //   })
-  // }
 
   const applySelection = (selection: Selection) => {
     if (selection.range == null) return

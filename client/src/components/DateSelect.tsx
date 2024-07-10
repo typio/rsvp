@@ -22,8 +22,8 @@ import {
 import { toast } from 'sonner'
 
 export enum DaySelectMode {
-  Dates = 'Dates',
-  DaysOfWeek = 'DaysOfWeek'
+  Dates = 0,
+  DaysOfWeek = 1
 }
 
 export type WeekDayNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7
@@ -123,6 +123,12 @@ const DaysOfWeekCalendar = ({
 }) => {
   const [isSelecting, setIsSelecting] = useState<null | boolean>(null)
 
+  useEffect(() => {
+    const handleMouseUp = () => setIsSelecting(null)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
+  }, [])
+
   const handleDaySelect = (day: WeekDayNumber, additive: boolean) => {
     let newDates =
       dates.mode === DaySelectMode.DaysOfWeek ? dates.dates.slice() : []
@@ -136,12 +142,7 @@ const DaysOfWeekCalendar = ({
   }
 
   return (
-    <div
-      className="flex flex-row justify-center"
-      onMouseUp={() => {
-        setIsSelecting(null)
-      }}
-    >
+    <div className="flex flex-row justify-center">
       {DAYS_OF_WEEK.three_letter_abbrv.map((day, _i) => {
         const i = _i as WeekDayNumber
 
@@ -153,7 +154,7 @@ const DaysOfWeekCalendar = ({
         return (
           <div
             key={i}
-            className={`h-36 w-16  px-0.5 select-none`}
+            className={`h-36 w-14 px-0.5 select-none flex justify-center items-center`}
             onMouseDown={() => {
               setIsSelecting(!isSelected)
               handleDaySelect(i, !isSelected)
@@ -162,11 +163,10 @@ const DaysOfWeekCalendar = ({
               if (isSelecting !== null) handleDaySelect(i, isSelecting)
             }}
           >
+            <div className="absolute text-sm font-medium">{day}</div>
             <div
-              className={`h-full w-full flex items-center justify-center ${isSelected ? 'bg-secondary' : 'bg-background text-muted-foreground'} rounded-lg font-medium text-sm`}
-            >
-              {day}
-            </div>
+              className={`h-full w-full flex items-center justify-center shadow-xl duration-300 ${isSelected ? 'bg-secondary bg-white/10 text-white' : 'bg-white/5 text-zinc-100 backdrop-blur-[1px]'} border-white/5 border-2 rounded-lg font-medium text-sm`}
+            ></div>
           </div>
         )
       })}
@@ -201,6 +201,12 @@ const DatesCalendar = ({
   // null when not selecting, boolean shows if selection is additive or not
   const [isSelecting, setIsSelecting] = useState<null | boolean>(null)
 
+  useEffect(() => {
+    const handleMouseUp = () => setIsSelecting(null)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => window.removeEventListener('mouseup', handleMouseUp)
+  }, [])
+
   const getDaysInMonth = (year: number, month: number) => {
     return new Date(year, month + 1, 0).getDate()
   }
@@ -226,9 +232,8 @@ const DatesCalendar = ({
       setShowError(true)
 
       // Clear any existing timeout
-      if (errorTimeoutRef.current) {
-        clearTimeout(errorTimeoutRef.current)
-      } else {
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current)
+      else {
         toast.error('You must become a Pro member to select 2+ weeks!', {
           description: 'Pro subscriptions are not available.',
           action: {
@@ -247,7 +252,12 @@ const DatesCalendar = ({
       newDates = prev
     }
 
-    setDates({ mode: DaySelectMode.Dates, dates: newDates })
+    setDates({
+      mode: DaySelectMode.Dates,
+      dates: newDates.sort(
+        (a, b) => new Date(a).getTime() - new Date(b).getTime()
+      )
+    })
   }
 
   const renderCalendar = () => {
@@ -340,7 +350,6 @@ const DatesCalendar = ({
         </div>
       )
     }
-
     return days
   }
 
@@ -351,10 +360,7 @@ const DatesCalendar = ({
   }
 
   return (
-    <div
-      className={`flex flex-col ${showError ? 'wiggle' : ''}`}
-      onMouseUp={() => setIsSelecting(null)}
-    >
+    <div className={`flex flex-col ${showError ? 'wiggle' : ''}`}>
       <div className="flex flex-row justify-between items-center mb-4">
         <Button variant="ghost" onClick={() => changeMonth(-1)}>
           <FontAwesomeIcon icon={faArrowLeft} />

@@ -59,6 +59,7 @@ const Join = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>(
     loadData.scheduleData
   )
+
   const [userName, setUserName] = useState<string>(loadData.userName)
 
   const [hoveredSlotUsers, setHoveredSlotUsers] = useState<null | boolean[]>(
@@ -143,7 +144,7 @@ const Join = () => {
           hoveredSlotUsers={hoveredSlotUsers}
         />
 
-        {scheduleData && scheduleData.dates.length > 0 && (
+        {scheduleData && scheduleData.dates.dates.length > 0 && (
           <Schedule
             data={scheduleData}
             isCreate={false}

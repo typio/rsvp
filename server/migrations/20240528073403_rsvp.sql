@@ -1,8 +1,9 @@
 CREATE TABLE rooms (
     uid VARCHAR(36) PRIMARY KEY,
     event_name VARCHAR(64),
+    schedule_type TINYINT UNSIGNED, -- enum Dates=0, DaysOfWeek=1
     dates JSON,
-    day_count TINYINT UNSIGNED,
+    days_of_week JSON,
     time_min TINYINT UNSIGNED,
     time_max TINYINT UNSIGNED,
     slot_length TINYINT UNSIGNED,

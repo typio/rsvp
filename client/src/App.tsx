@@ -11,6 +11,7 @@ import Join, { JoinRouteData } from './screens/Join'
 import About from './screens/About'
 import { h24ToTimeRange } from './utils'
 import { WebSocketProvider } from './contexts/WebSocketContext'
+import { DaySelectMode } from './components/DateSelect'
 
 const App = () => {
   const router = createBrowserRouter([
@@ -30,6 +31,7 @@ const App = () => {
           loader: ({ params }): Promise<JoinRouteData> => {
             const roomUid = params.room_uid
 
+            // NOTE: Slight issue where if Create successfully creates a room but this fails to load it, then that room is essentially lost and wasting resources
             return new Promise((resolve, reject) => {
               fetch(`http://localhost:3632/api/auth`, {
                 method: 'POST',
@@ -42,9 +44,16 @@ const App = () => {
                       credentials: 'include'
                     }).then(res => {
                       res.json().then(resJSON => {
+                        console.log(resJSON)
                         const scheduleData = {
                           eventName: resJSON.event_name,
-                          dates: resJSON.dates.map((d: string) => new Date(d)),
+                          dates: {
+                            mode: resJSON.schedule_type,
+                            dates:
+                              resJSON.schedule_type === DaySelectMode.Dates
+                                ? resJSON.dates
+                                : resJSON.days_of_week
+                          },
                           timeRange: h24ToTimeRange(resJSON.time_range),
                           slotLength: resJSON.slot_length,
                           userSchedule: resJSON.user_schedule,

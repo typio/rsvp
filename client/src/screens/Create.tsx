@@ -4,13 +4,9 @@ import { NavigateFunction, useNavigate } from 'react-router-dom'
 import { addDays, startOfDay } from 'date-fns'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import {
-  faHandshake,
-  faPlaneDeparture,
-  faSquareUpRight
-} from '@fortawesome/free-solid-svg-icons'
+import { faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -249,7 +245,7 @@ const Create = () => {
   return (
     <main className="gap-x-8 w-full max-w-3xl mx-auto">
       <Tabs defaultValue="time">
-        <TabsList className="mb-4">
+        {/* <TabsList className="mb-4">
           <TabsTrigger value="time">
             <FontAwesomeIcon icon={faHandshake} />
             Time
@@ -259,6 +255,7 @@ const Create = () => {
             Days
           </TabsTrigger>
         </TabsList>
+      */}
         <TabsContent value="time" className="rounded-md">
           <div className="flex flex-col gap-4">
             <CreateOptions
@@ -267,7 +264,7 @@ const Create = () => {
               shareRoom={shareRoom}
             />
 
-            {scheduleData.dates.dates.length > 0 && (
+            {scheduleData.dates.dates.length > 0 ? (
               <Schedule
                 data={scheduleData}
                 isCreate={true}
@@ -276,6 +273,10 @@ const Create = () => {
                 othersColors={[]}
                 editSchedule={newSchedule => setScheduleData(newSchedule)}
               />
+            ) : (
+              <div className="flex mt-6 justify-center ">
+                You haven't selected any days!
+              </div>
             )}
           </div>
         </TabsContent>

@@ -5,8 +5,6 @@ use utils::{generate_auth_token, generate_id};
 
 use async_std::prelude::*;
 use async_std::sync::Mutex;
-use async_std::task;
-use core::panic;
 use dotenv::dotenv;
 use futures::select;
 use futures::FutureExt;
@@ -15,6 +13,7 @@ use sqlx::mysql::MySqlConnectOptions;
 use sqlx::mysql::MySqlPool;
 use sqlx::MySql;
 use sqlx::Pool;
+use sqlx::Transaction;
 use std::collections::HashMap;
 use std::env;
 use std::str::FromStr;
@@ -62,13 +61,14 @@ struct UserOfRoom {
 #[derive(Debug, Clone, sqlx::FromRow)]
 struct Room {
     uid: String,
+    schedule_type: u8,
     event_name: String,
     dates: String,
-    day_count: u8,
+    days_of_week: String,
     time_min: u8,
     time_max: u8,
     slot_length: u8,
-    schedule: String,
+    schedule: String, // TODO: Change from full user_uids to indexes into users_of_room maybe?
     expires_at: time_new::OffsetDateTime,
 }
 
@@ -196,6 +196,8 @@ async fn handle_websocket_message(
 
     match msg.message_type.as_str() {
         "editSchedule" => {
+            let mut transaction = (&state.db_pool).begin().await?;
+
             let user_schedule: Vec<Vec<bool>> =
                 serde_json::from_value(msg.payload["user_schedule"].clone())?;
 
@@ -227,7 +229,7 @@ async fn handle_websocket_message(
                 user_name,
                 false
             )
-            .execute(&state.db_pool)
+            .execute(&mut *transaction)
             .await;
 
             // get schedule as in DB
@@ -238,7 +240,7 @@ async fn handle_websocket_message(
                     "#,
             )
             .bind(&room_uid)
-            .fetch_one(&state.db_pool)
+            .fetch_one(&mut *transaction)
             .await?;
 
             // update schedule
@@ -272,8 +274,10 @@ async fn handle_websocket_message(
                 json!(schedule),
                 room_uid,
             )
-            .execute(&state.db_pool)
+            .execute(&mut *transaction)
             .await;
+
+            transaction.commit().await?;
 
             for (wsc_user_uid, wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter() {
                 let room_data = process_room_data(&state, &room_uid, &wsc_user_uid)
@@ -350,7 +354,7 @@ async fn handle_websocket_message(
             let user_name_payload: EditUserNamePayload =
                 serde_json::from_value(msg.payload).unwrap();
 
-            let res = sqlx::query(
+            sqlx::query(
                 r#"
                 UPDATE users_of_rooms
                 SET name=?
@@ -502,7 +506,9 @@ async fn process_room_data(
 
     Ok(GetRoomRes {
         event_name: room.event_name,
+        schedule_type: room.schedule_type,
         dates: serde_json::from_str(&room.dates)?,
+        days_of_week: serde_json::from_str(&room.days_of_week)?,
         slot_length: room.slot_length,
         user_schedule,
         others_schedule: others_schedule_indices,
@@ -548,12 +554,11 @@ fn seperate_users_schedule<'a>(
 async fn authenticate(req: Request<State>) -> tide::Result {
     let mut response = Response::new(StatusCode::Ok);
 
-    let mut user_uid = get_user_uid_from_cookie(&req).await;
+    if get_user_uid_from_cookie(&req).await == None {
+        let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
-    if user_uid == None {
-        match signup(req.state().db_pool.clone()).await {
-            Ok((signup_result, cookie)) => {
-                user_uid = Some(signup_result.user_uid);
+        match signup(&mut transaction).await {
+            Ok((_signup_result, cookie)) => {
                 response.insert_cookie(cookie);
             }
             Err(err) => {
@@ -561,6 +566,8 @@ async fn authenticate(req: Request<State>) -> tide::Result {
                 return Ok(Response::new(StatusCode::InternalServerError));
             }
         }
+
+        transaction.commit().await?;
     }
 
     Ok(response)
@@ -569,7 +576,9 @@ async fn authenticate(req: Request<State>) -> tide::Result {
 #[derive(Debug, Serialize, Deserialize)]
 struct GetRoomRes {
     event_name: String,
+    schedule_type: u8,
     dates: Vec<String>,
+    days_of_week: Vec<u8>,
     slot_length: u8,
     user_schedule: Vec<Vec<bool>>,
     others_schedule: Vec<Vec<Vec<usize>>>,
@@ -608,11 +617,13 @@ async fn delete_room(req: Request<State>) -> tide::Result {
         return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
     }
 
+    let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
+
     let (is_owner,): (bool,) =
         sqlx::query_as("SELECT is_owner FROM users_of_rooms WHERE user_uid=? AND room_uid=?")
             .bind(user_uid)
             .bind(room_uid)
-            .fetch_one(&req.state().db_pool)
+            .fetch_one(&mut *transaction)
             .await?;
 
     if !is_owner {
@@ -626,7 +637,7 @@ async fn delete_room(req: Request<State>) -> tide::Result {
         "#,
     )
     .bind(room_uid)
-    .execute(&req.state().db_pool)
+    .execute(&mut *transaction)
     .await
     {
         Ok(_) => {}
@@ -635,52 +646,86 @@ async fn delete_room(req: Request<State>) -> tide::Result {
 
     match sqlx::query("DELETE FROM users_of_rooms WHERE room_uid=?")
         .bind(room_uid)
-        .execute(&req.state().db_pool)
+        .execute(&mut *transaction)
         .await
     {
         Ok(_) => {}
         Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
     };
 
+    transaction.commit().await?;
     Ok(response)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum ScheduleDates {
+    Dates(Vec<String>),
+    DaysOfWeek(Vec<u8>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CreateRoomReq {
     event_name: String,
-    dates: Vec<String>,
+    schedule_type: u8, // NOTE: I want to use an enum but sqlx nor TS+serde work well
+    dates: ScheduleDates,
     slot_length: u8,
     schedule: Vec<Vec<bool>>,
     time_range: TimeRange,
 }
 
 async fn create_room(mut req: Request<State>) -> tide::Result {
-    let req_body: CreateRoomReq = req.body_json().await.unwrap_or_else(|_e| {
-        panic!();
-    });
+    let req_body = match req.body_json::<CreateRoomReq>().await {
+        Ok(res) => res,
+        Err(e) => {
+            println!("err: {}", { e });
+            return Ok(Response::new(StatusCode::BadRequest));
+        }
+    };
+
+    let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
     let mut response = Response::new(StatusCode::Ok);
     let mut user_uid: Option<String> = get_user_uid_from_cookie(&req).await;
 
     if user_uid == None {
-        match signup(req.state().db_pool.clone()).await {
-            Ok((signup_result, cookie)) => {
-                user_uid = Some(signup_result.user_uid);
+        match signup(&mut transaction).await {
+            Ok((new_user_uid, cookie)) => {
+                user_uid = Some(new_user_uid);
                 response.insert_cookie(cookie);
             }
             Err(err) => {
-                println!("{}", err);
+                println!("Error: {}", err);
                 return Ok(Response::new(StatusCode::InternalServerError));
             }
         }
     }
 
-    // TODO: while this conflicts with existing uid make a new one,
-    // create a process that deletes expired rooms
-    let room_uid = generate_id(req.peer_addr().unwrap_or(""), 4);
+    // TODO: create a process that deletes expired rooms
 
-    let dates = json!(req_body.dates);
-    let day_count = req_body.dates.len() as u8;
+    let room_uid: String;
+
+    loop {
+        let temp_uid = generate_id(req.peer_addr().unwrap_or(""), 4);
+        match sqlx::query("SELECT * FROM rooms WHERE uid=?")
+            .bind(temp_uid.clone())
+            .fetch_one(&mut *transaction)
+            .await
+        {
+            Ok(_) => false,
+            Err(sqlx::Error::RowNotFound) => {
+                room_uid = temp_uid;
+                break;
+            }
+            Err(e) => panic!("{}", e),
+        };
+    }
+
+    let (schedule_type, dates, days_of_week) = match req_body.dates {
+        ScheduleDates::Dates(d) => (0u8, json!(d), serde_json::json!([])),
+        ScheduleDates::DaysOfWeek(d) => (1u8, serde_json::json!([]), json!(d)),
+    };
+
     let schedule = json!(req_body
         .schedule
         .iter()
@@ -703,20 +748,21 @@ async fn create_room(mut req: Request<State>) -> tide::Result {
 
     let _ = match sqlx::query!(
         r#"
-        INSERT INTO rooms (uid, event_name, dates, day_count, time_min, time_max, slot_length, schedule, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO rooms (uid, event_name, schedule_type, dates, days_of_week, time_min, time_max, slot_length, schedule, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         room_uid,
         req_body.event_name,
+        schedule_type,
         dates,
-        day_count,
+        days_of_week,
         req_body.time_range.from_hour,
         req_body.time_range.to_hour,
         req_body.slot_length,
         schedule,
         expiry
     )
-    .execute(&req.state().db_pool)
+    .execute(&mut *transaction)
     .await
     {
         Ok(_) => response.set_body(json!({
@@ -735,7 +781,7 @@ async fn create_room(mut req: Request<State>) -> tide::Result {
         "Jeff",
         true
     )
-    .execute(&req.state().db_pool)
+    .execute(&mut *transaction)
     .await
     {
         Ok(_) => response.set_body(json!({
@@ -744,12 +790,9 @@ async fn create_room(mut req: Request<State>) -> tide::Result {
         Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
     };
 
-    Ok(response)
-}
+    transaction.commit().await?;
 
-struct SignupResult {
-    auth_token: String,
-    user_uid: String,
+    Ok(response)
 }
 
 async fn get_user_uid_from_cookie(req: &Request<State>) -> Option<String> {
@@ -777,7 +820,9 @@ async fn get_user_uid_from_cookie(req: &Request<State>) -> Option<String> {
     user_uid
 }
 
-async fn signup(pool: Pool<MySql>) -> Result<(SignupResult, Cookie<'static>), sqlx::Error> {
+async fn signup(
+    transaction: &mut Transaction<'_, MySql>,
+) -> Result<(String, Cookie<'static>), sqlx::Error> {
     let user_uid = Uuid::new_v4().to_string();
     let auth_token = generate_auth_token();
 
@@ -789,15 +834,12 @@ async fn signup(pool: Pool<MySql>) -> Result<(SignupResult, Cookie<'static>), sq
         user_uid,
         auth_token
     )
-    .execute(&pool)
+    .execute(&mut **transaction)
     .await
     {
         Ok(_) => {
             return Ok((
-                SignupResult {
-                    auth_token: auth_token.clone(),
-                    user_uid,
-                },
+                user_uid,
                 Cookie::build("auth_token", auth_token)
                     .http_only(true)
                     .path("/")

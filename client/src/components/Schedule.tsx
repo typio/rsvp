@@ -17,6 +17,8 @@ import {
 } from '@/contexts/ScheduleContext'
 import { Colors } from '@/colors'
 import { DAYS_OF_WEEK, DaySelectMode } from './DateSelect'
+import { addDays, isSameDay } from 'date-fns'
+import { toast } from 'sonner'
 
 const TIME_COL_WIDTH = 64
 const HEADER_HEIGHT = 64
@@ -43,7 +45,8 @@ export const shareRoom = (
 ) => {
   let req = JSON.stringify({
     event_name: scheduleData.eventName,
-    dates: scheduleData.dates,
+    schedule_type: scheduleData.dates.mode,
+    dates: scheduleData.dates.dates,
     time_range: {
       from_hour:
         h12To24(
@@ -63,11 +66,25 @@ export const shareRoom = (
     method: 'POST',
     body: req,
     credentials: 'include'
-  }).then(res => {
-    res.json().then(resJSON => {
-      navigate(`/${resJSON.room_uid}`)
-    })
   })
+    .then(res => {
+      if (res.status === 200) {
+        res.json().then(resJSON => {
+          navigate(`/${resJSON.room_uid}`)
+        })
+      } else {
+        throw new Error(res.statusText)
+      }
+    })
+    .catch((e: TypeError) =>
+      toast.error('Error creating room.', {
+        description: e.message,
+        cancel: {
+          label: 'Dismiss',
+          onClick: () => {}
+        }
+      })
+    )
 }
 
 type TimeCalculations = {
@@ -168,50 +185,18 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
       }}
     >
       <div className="flex flex-col pb-2 overflow-x-scroll">
-        <div className="flex flex-row" style={{ marginLeft: TIME_COL_WIDTH }}>
-          {data.dates.mode === DaySelectMode.Dates
-            ? data.dates.dates.map((dateString, i) => {
-                const date = new Date(dateString)
-
-                return (
-                  <div
-                    key={i}
-                    className="flex flex-grow flex-col justify-center items-center text-sm"
-                    style={{ height: HEADER_HEIGHT }}
-                  >
-                    <>
-                      <div className="font-sans">
-                        {date.toLocaleString('en-US', {
-                          month: 'numeric',
-                          day: 'numeric'
-                        })}
-                      </div>
-                      <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
-                        {date.toLocaleString('en-US', {
-                          weekday: 'short'
-                        })}
-                      </div>
-                    </>
-                  </div>
-                )
-              })
-            : data.dates.dates.map(dayN => (
-                <div
-                  key={dayN}
-                  className="flex flex-row flex-grow justify-center items-center font-sans"
-                  style={{ height: HEADER_HEIGHT }}
-                >
-                  {DAYS_OF_WEEK.three_letter_abbrv[dayN]}
-                </div>
-              ))}
-        </div>
+        <div
+          className="flex flex-row"
+          style={{ marginLeft: TIME_COL_WIDTH }}
+        ></div>
         <div className="flex flex-row">
           <div
             className="flex flex-col justify-between font-time text-sm text-right"
             style={{
-              width: TIME_COL_WIDTH,
+              width: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
               paddingRight: 12,
-              minHeight: (time.timeDifference / 60) * CELL_HEIGHT
+              minHeight: (time.timeDifference / 60) * CELL_HEIGHT,
+              marginTop: HEADER_HEIGHT
             }}
           >
             {time.timeDifference > 0 &&
@@ -237,19 +222,68 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
               })}
           </div>
 
-          <div className="flex flex-row flex-1 gap-x-1" id="slot-parent">
-            {data.dates.dates.map((_, dateIndex) => (
-              <DayColumn
-                key={`day-column-${dateIndex}`}
-                isCreate={isCreate}
-                currentSelection={currentSelection}
-                dateIndex={dateIndex}
-                dayUser={data?.userSchedule[dateIndex] ?? []}
-                dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
-                hoursPerColumn={time.hoursPerColumn}
-                slotsPerHour={time.slotsPerHour}
-              />
-            ))}
+          <div
+            className="flex flex-row flex-1 basis-1 gap-x-1"
+            id="slot-parent"
+          >
+            {data.dates.dates.map((date, dateIndex) => {
+              const thisDate: Date | undefined =
+                data.dates.mode === DaySelectMode.Dates
+                  ? new Date(date as string)
+                  : undefined
+              const thisDayOfWeek: number | undefined =
+                data.dates.mode === DaySelectMode.Dates
+                  ? undefined
+                  : (date as number)
+
+              let leftIsAdj
+              let rightIsAdj
+
+              if (data.dates.mode === DaySelectMode.Dates) {
+                const today = new Date(data.dates.dates[dateIndex])
+
+                if (dateIndex === 0) leftIsAdj = true
+                else {
+                  const leftDate = new Date(data.dates.dates[dateIndex - 1])
+                  const yesterday = addDays(today, -1)
+                  leftIsAdj = isSameDay(leftDate, yesterday)
+                }
+
+                if (dateIndex === data.dates.dates.length - 1) rightIsAdj = true
+                else {
+                  const rightDate = new Date(data.dates.dates[dateIndex + 1])
+                  const tomorrow = addDays(today, 1)
+                  rightIsAdj = isSameDay(rightDate, tomorrow)
+                }
+              } else {
+                leftIsAdj =
+                  dateIndex === 0
+                    ? true
+                    : date === data.dates.dates[dateIndex - 1] + 1
+                rightIsAdj =
+                  dateIndex === data.dates.dates.length - 1
+                    ? true
+                    : date === data.dates.dates[dateIndex + 1] - 1
+              }
+
+              return (
+                <DayColumn
+                  key={`day-column-${dateIndex}`}
+                  isCreate={isCreate}
+                  currentSelection={currentSelection}
+                  dateIndex={dateIndex}
+                  dayUser={data?.userSchedule[dateIndex] ?? []}
+                  dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
+                  hoursPerColumn={time.hoursPerColumn}
+                  slotsPerHour={time.slotsPerHour}
+                  leftIsAdj={leftIsAdj}
+                  rightIsAdj={rightIsAdj}
+                  mode={data.dates.mode}
+                  date={thisDate}
+                  dayN={thisDayOfWeek}
+                />
+              )
+            })}
           </div>
         </div>
       </div>
@@ -264,15 +298,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
   )
 }
 
-const DayColumn = ({
-  isCreate,
-  currentSelection,
-  dateIndex,
-  dayUser,
-  dayOthers,
-  hoursPerColumn,
-  slotsPerHour
-}: {
+type DayColumnProps = {
   isCreate: boolean
   currentSelection: Selection
   dateIndex: number
@@ -280,42 +306,99 @@ const DayColumn = ({
   dayOthers: number[][]
   hoursPerColumn: number
   slotsPerHour: number
-}) => {
+  leftIsAdj: boolean
+  rightIsAdj: boolean
+  mode: DaySelectMode
+  date: Date | undefined
+  dayN: number | undefined
+}
+
+const DayColumn = ({
+  isCreate,
+  currentSelection,
+  dateIndex,
+  dayUser,
+  dayOthers,
+  hoursPerColumn,
+  slotsPerHour,
+  leftIsAdj,
+  rightIsAdj,
+  mode,
+  date,
+  dayN
+}: DayColumnProps) => {
   return (
-    <div className="basis-1 flex flex-col flex-grow min-w-14 justify-center rounded-2xl overflow-hidden gap-y-0.5">
-      {Array.from({ length: hoursPerColumn })?.map((_, i) => {
-        return (
-          <div className="flex flex-col" key={i}>
-            {Array.from({ length: slotsPerHour })?.map((_, j) => {
-              let idx = slotsPerHour * i + j
-              if (idx >= dayUser.length) return
+    <div className={`basis-1 flex flex-col flex-grow min-w-14 justify-center`}>
+      <div
+        className={`flex flex-col justify-center  ${!rightIsAdj && 'mr-1'} ${!leftIsAdj && 'ml-1'}`}
+      >
+        <div
+          className="flex flex-grow flex-col justify-center items-center text-sm"
+          style={{ height: HEADER_HEIGHT }}
+        >
+          <ColumnHeader mode={mode} date={date} dayN={dayN} />
+        </div>
+        <div
+          id="slot-column"
+          className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5"
+        >
+          {Array.from({ length: hoursPerColumn })?.map((_, i) => {
+            return (
+              <div className="flex flex-col" key={i}>
+                {Array.from({ length: slotsPerHour })?.map((_, j) => {
+                  let idx = slotsPerHour * i + j
+                  if (idx >= dayUser.length) return
 
-              const timeIndex = idx
-              const isSelected = dayUser[idx]
+                  const timeIndex = idx
+                  const isSelected = dayUser[idx]
 
-              const isDragSelected = checkIsDragSelected(
-                currentSelection,
-                dateIndex,
-                timeIndex
-              )
+                  const isDragSelected = checkIsDragSelected(
+                    currentSelection,
+                    dateIndex,
+                    timeIndex
+                  )
 
-              return (
-                <Slot
-                  key={timeIndex}
-                  isCreate={isCreate}
-                  dateIndex={dateIndex}
-                  timeIndex={timeIndex}
-                  isSelected={isSelected}
-                  isDragSelected={isDragSelected}
-                  othersValue={dayOthers?.at(timeIndex) ?? []}
-                />
-              )
-            })}
-          </div>
-        )
-      })}
+                  return (
+                    <Slot
+                      key={timeIndex}
+                      isCreate={isCreate}
+                      dateIndex={dateIndex}
+                      timeIndex={timeIndex}
+                      isSelected={isSelected}
+                      isDragSelected={isDragSelected}
+                      othersValue={dayOthers?.at(timeIndex) ?? []}
+                    />
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
+}
+
+const ColumnHeader = ({
+  mode,
+  date,
+  dayN
+}: Pick<DayColumnProps, 'mode' | 'date' | 'dayN'>) => {
+  if (mode === DaySelectMode.Dates && date) {
+    return (
+      <>
+        <div className="font-sans">
+          {date.toLocaleString('en-US', { month: 'numeric', day: 'numeric' })}
+        </div>
+        <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
+          {date.toLocaleString('en-US', { weekday: 'short' })}
+        </div>
+      </>
+    )
+  } else if (mode === DaySelectMode.DaysOfWeek && dayN !== undefined) {
+    return <>{DAYS_OF_WEEK.three_letter_abbrv[dayN]}</>
+  }
+  return null
 }
 
 const Slot = ({
@@ -361,7 +444,7 @@ const Slot = ({
         handleMouseDownSlot(dateIndex, timeIndex, isSelected)
       }}
     >
-      <div className="relative w-full h-full bg-background overflow-hidden">
+      <div className={`relative w-full h-full bg-background overflow-hidden `}>
         <div
           className="absolute w-full h-full duration-150"
           style={{
