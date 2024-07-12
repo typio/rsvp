@@ -27,23 +27,29 @@ export const useWebSocketUpdates = (
 
   useEffect(() => {
     if (lastMessage !== null) {
-      const message = JSON.parse(lastMessage.data)
+      if (lastMessage.data?.trim() === 'ping') {
+        console.log('ping')
+      } else if (lastMessage.data?.trim() === 'pong') {
+        console.log('pong')
+      } else {
+        const message = JSON.parse(lastMessage.data)
 
-      switch (message.message_type) {
-        case 'editEventName':
-          setScheduleData(prev => ({ ...prev, eventName: message.payload }))
-          break
-        case 'editUserName':
-          setScheduleData(prev => ({ ...prev, others: message.payload }))
-          break
-        case 'editSchedule':
-          setScheduleData(prev => ({
-            ...prev,
-            othersSchedule: message.payload
-          }))
-          break
-        default:
-          console.log('Unknown WebSocket message:', message)
+        switch (message.message_type) {
+          case 'editEventName':
+            setScheduleData(prev => ({ ...prev, eventName: message.payload }))
+            break
+          case 'editUserName':
+            setScheduleData(prev => ({ ...prev, others: message.payload }))
+            break
+          case 'editSchedule':
+            setScheduleData(prev => ({
+              ...prev,
+              othersSchedule: message.payload
+            }))
+            break
+          default:
+            console.log('Unknown WebSocket message:', message)
+        }
       }
     }
   }, [lastMessage, setScheduleData])

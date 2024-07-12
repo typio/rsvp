@@ -13,6 +13,7 @@ type ScheduleContextType = {
   isCreate: boolean
   data: ScheduleData
   editSchedule: (newData: ScheduleData) => void
+  hoveringUser: number | null
 } & ScheduleSelectionContextType &
   ColorCalculationContextType
 
@@ -62,6 +63,7 @@ export const ScheduleProvider = ({
         ...selectionProps,
         ...colorProps,
         isCreate,
+        hoveringUser,
         data: initialData,
         editSchedule
       }}

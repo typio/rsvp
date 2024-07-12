@@ -419,7 +419,8 @@ const Slot = ({
   const {
     calculateCreateSlotColor,
     calculateJoinSlotColor,
-    handleMouseDownSlot
+    handleMouseDownSlot,
+    hoveringUser
   } = useScheduleContext()
 
   let slotColor, alpha, showOthers
@@ -454,6 +455,7 @@ const Slot = ({
         />
         <div className="absolute z-10 w-full h-full flex-1 flex-grow flex flex-row justify-around items-center ">
           {!isCreate &&
+            hoveringUser === null &&
             showOthers &&
             othersValue?.map((v: number, i: number) => (
               <div

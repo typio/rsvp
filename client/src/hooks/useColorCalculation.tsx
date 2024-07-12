@@ -67,23 +67,25 @@ export const useColorCalculation = (
 
     alpha = hoveringUser === null ? 1 : 0.3
 
-    const cellSelectedByHoveringUser =
+    const cellSelectedByHoveringOtherUser =
       hoveringUser && othersValue?.includes(hoveringUser - 1)
 
-    if (cellSelectedByHoveringUser && hoveringUser >= 1)
+    if (hoveringUser === 0 && isSelected)
+      slotColor = tinycolor('hsl ' + userColorString)
+    else if (cellSelectedByHoveringOtherUser && hoveringUser >= 1)
       slotColor = tinycolor(Colors.othersColors[hoveringUser - 1])
     else if (cellSelectedByAll) slotColor = tinycolor('hsl ' + allColorString)
     else if (isSelected || (isDragSelected && currentSelection.additive))
       slotColor = tinycolor('hsl ' + userColorString)
 
-    if (cellSelectedByHoveringUser || (hoveringUser === 0 && isSelected))
+    if (cellSelectedByHoveringOtherUser || (hoveringUser === 0 && isSelected))
       alpha = 1
 
     if (isDragSelected && !currentSelection.additive) alpha = 0.3
 
     return {
       res: { slotColor, alpha },
-      showOthers: !cellSelectedByAll && !cellSelectedByHoveringUser
+      showOthers: !cellSelectedByAll && !cellSelectedByHoveringOtherUser
     }
   }
 

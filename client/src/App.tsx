@@ -44,7 +44,6 @@ const App = () => {
                       credentials: 'include'
                     }).then(res => {
                       res.json().then(resJSON => {
-                        console.log(resJSON)
                         const scheduleData = {
                           eventName: resJSON.event_name,
                           dates: {

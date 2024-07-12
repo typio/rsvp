@@ -28,7 +28,8 @@ export const WebSocketProvider: React.FC<React.PropsWithChildren<{}>> = ({
   const socketUrl = roomUid ? `ws://localhost:3632/api/ws/${roomUid}` : null
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl, {
-    shouldReconnect: () => !!roomUid
+    shouldReconnect: () => roomUid !== null,
+    heartbeat: true
   })
 
   return (
