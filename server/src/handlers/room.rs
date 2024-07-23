@@ -1,11 +1,12 @@
 use crate::auth::signup;
-use crate::models::{CreateRoomReq, GetRoomRes, Room, ScheduleDates, State, TimeRange};
+use crate::models::{
+    CreateRoomReq, GetRoomRes, Room, RoomDeletedPing, ScheduleDates, State, TimeRange,
+};
 use crate::utils::{generate_id, get_user_uid_from_cookie};
 
 use sqlx::MySql;
 use sqlx::Transaction;
 use std::collections::HashMap;
-use std::str::FromStr;
 use tide::prelude::*;
 use tide::Request;
 use tide::Response;
@@ -85,7 +86,7 @@ pub async fn process_room_data(
     state: &State,
     room_uid: &str,
     user_uid: &str,
-) -> Result<GetRoomRes, Box<dyn std::error::Error>> {
+) -> Result<GetRoomRes, tide::Error> {
     let room: Room = sqlx::query_as(
         r#"
         SELECT * FROM rooms
@@ -95,44 +96,62 @@ pub async fn process_room_data(
     .bind(room_uid)
     .fetch_one(&state.db_pool)
     .await
-    .unwrap();
+    .map_err(|e| match e {
+        sqlx::Error::RowNotFound => tide::Error::from_str(StatusCode::NotFound, "Room not found"),
+        _ => tide::Error::from_str(StatusCode::InternalServerError, "Database error"),
+    })?;
 
     // Process schedule
     let schedule: Vec<Vec<Vec<&str>>> = serde_json::from_str(&room.schedule)?;
     let (user_schedule, others_schedule) = seperate_users_schedule(schedule, user_uid);
 
     // get users
-    let users_of_room: Vec<(String, String)> = sqlx::query_as(
+    let users_of_room: Vec<(String, String, bool, String)> = sqlx::query_as(
         r#"
-        SELECT user_uid, name FROM users_of_rooms
+        SELECT user_uid, name, is_absent, absent_reason FROM users_of_rooms
         WHERE room_uid=?
         "#,
     )
     .bind(room_uid)
     .fetch_all(&state.db_pool)
-    .await
-    .unwrap();
+    .await?;
 
-    // User might not be in room yet (as in GET request), that's ok
-    let (user_name, is_owner): (String, bool) = sqlx::query_as(
-        r#"
-        SELECT name, is_owner FROM users_of_rooms
+    // Requesting user might not be in room yet (as in GET request), that's ok
+    let (user_name, is_owner, is_absent, absent_reason): (String, bool, bool, String) =
+        sqlx::query_as(
+            r#"
+        SELECT name, is_owner, is_absent, absent_reason FROM users_of_rooms
         WHERE room_uid=? AND user_uid=?
         "#,
-    )
-    .bind(room_uid)
-    .bind(user_uid)
-    .fetch_one(&state.db_pool)
-    .await
-    .unwrap_or((String::new(), false));
+        )
+        .bind(room_uid)
+        .bind(user_uid)
+        .fetch_one(&state.db_pool)
+        .await
+        .unwrap_or((String::new(), false, false, String::new()));
 
     let user_uids_and_names_of_room: Vec<(&str, &str)> = users_of_room
         .iter()
-        .map(|(uid, name)| (uid.as_ref(), name.as_ref()))
+        .map(|(uid, name, _, _)| (uid.as_ref(), name.as_ref()))
         .collect();
 
     let (others_names, others_schedule_indices) =
         get_sanitized_others(others_schedule, user_uids_and_names_of_room, user_uid);
+
+    let mut absent_reasons = Vec::with_capacity(users_of_room.len() + 1);
+    absent_reasons.push(if is_absent { Some(absent_reason) } else { None });
+    absent_reasons.extend(
+        users_of_room
+            .iter()
+            .filter(|(this_user_uid, _, _, _)| this_user_uid != user_uid)
+            .map(|(_, _, is_absent, absent_reason)| {
+                if *is_absent {
+                    Some(absent_reason.to_owned())
+                } else {
+                    None
+                }
+            }),
+    );
 
     Ok(GetRoomRes {
         event_name: room.event_name,
@@ -149,6 +168,7 @@ pub async fn process_room_data(
             to_hour: room.time_max,
         },
         is_owner,
+        absent_reasons,
     })
 }
 
@@ -251,13 +271,15 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
 
     let _ = match sqlx::query!(
         r#"
-        INSERT INTO users_of_rooms (user_uid, room_uid, name, is_owner)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
+        VALUES (?, ?, ?, ?, ?, ?)
         "#,
         user_uid,
         room_uid,
         "Jeff",
-        true
+        true,
+        false,
+        ""
     )
     .execute(&mut *transaction)
     .await
@@ -274,17 +296,18 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
 }
 
 pub async fn get_room(req: Request<State>) -> tide::Result {
-    let room_uid: String = req.param("room_uid")?.to_string();
+    let room_uid = req.param("room_uid")?;
 
     let mut response = Response::new(StatusCode::Ok);
 
     let user_uid = get_user_uid_from_cookie(&req)
         .await
-        .unwrap_or(String::from_str("none")?);
+        .unwrap_or_else(|| String::from("none"));
 
-    let room_data = process_room_data(&req.state(), &room_uid, &user_uid)
-        .await
-        .unwrap();
+    let room_data = match process_room_data(&req.state(), room_uid, &user_uid).await {
+        Ok(res) => res,
+        Err(_) => return Ok(Response::new(StatusCode::NotFound)),
+    };
 
     let response_body_string = serde_json::to_string(&room_data)?;
     response.set_body(response_body_string);
@@ -293,27 +316,30 @@ pub async fn get_room(req: Request<State>) -> tide::Result {
 }
 
 pub async fn delete_room(req: Request<State>) -> tide::Result {
-    let room_uid = req.param("room_uid")?;
-
     let response = Response::new(StatusCode::Ok);
-    let user_uid: Option<String> = get_user_uid_from_cookie(&req).await;
 
-    if user_uid == None {
+    let room_uid: &str = req.param("room_uid")?;
+
+    let user_uid: String = get_user_uid_from_cookie(&req).await.unwrap_or_default();
+
+    if user_uid.len() == 0 {
         return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
     }
 
-    let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
+    let user_uid: &str = user_uid.as_ref();
 
     let (is_owner,): (bool,) =
         sqlx::query_as("SELECT is_owner FROM users_of_rooms WHERE user_uid=? AND room_uid=?")
             .bind(user_uid)
             .bind(room_uid)
-            .fetch_one(&mut *transaction)
+            .fetch_one(&req.state().db_pool)
             .await?;
 
     if !is_owner {
         return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
     }
+
+    let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
     match sqlx::query(
         r#"
@@ -339,5 +365,16 @@ pub async fn delete_room(req: Request<State>) -> tide::Result {
     };
 
     transaction.commit().await?;
+
+    for (this_user_uid, user_wsc) in req.state().rooms.lock().await.get(room_uid).unwrap().iter() {
+        if *this_user_uid != user_uid {
+            let _ = user_wsc
+                .send_json(&RoomDeletedPing {
+                    message_type: "roomDeleted".to_string(),
+                })
+                .await;
+        }
+    }
+
     Ok(response)
 }

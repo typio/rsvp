@@ -1,5 +1,9 @@
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCircleExclamation } from '@fortawesome/free-solid-svg-icons'
+import {
+  faCircleCheck,
+  faCircleExclamation,
+  faWarning
+} from '@fortawesome/free-solid-svg-icons'
 
 import { useTheme } from 'next-themes'
 import { Toaster as Sonner } from 'sonner'
@@ -12,15 +16,17 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme={theme as ToasterProps['theme']}
-      className="toaster group"
+      className="toaster group data-[description]:text-black"
       toastOptions={{
         classNames: {
           toast:
             'group toast group-[.toaster]:bg-card/80 group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg pl-4',
-          description: 'group-[.toast]:text-muted-foreground',
+          description: 'text-white opacity-35',
           actionButton:
             'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
-          cancelButton: 'group-[.toast]:bg-secondary group-[.toast]:text-white'
+          cancelButton: 'group-[.toast]:bg-secondary group-[.toast]:text-white',
+          success: 'group-[.toaster]:text-primary',
+          error: ''
         }
       }}
       icons={{
@@ -28,6 +34,16 @@ const Toaster = ({ ...props }: ToasterProps) => {
           <FontAwesomeIcon
             className="w-4 h-4 text-destructive"
             icon={faCircleExclamation}
+          />
+        ),
+        warning: (
+          <FontAwesomeIcon className="w-4 h-4 text-primary" icon={faWarning} />
+        ),
+
+        success: (
+          <FontAwesomeIcon
+            className="w-4 h-4 text-primary"
+            icon={faCircleCheck}
           />
         )
       }}

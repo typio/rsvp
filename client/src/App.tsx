@@ -20,19 +20,22 @@ const App = () => {
       children: [
         {
           path: '/',
-          element: <Create />,
-          errorElement: <ErrorBoundary />
+          element: <Create />
         },
         {
           path: '/:room_uid',
           element: <Join />,
-          errorElement: <ErrorBoundary />,
 
           loader: ({ params }): Promise<JoinRouteData> => {
             const roomUid = params.room_uid
 
             // NOTE: Slight issue where if Create successfully creates a room but this fails to load it, then that room is essentially lost and wasting resources
             return new Promise((resolve, reject) => {
+              if (roomUid === undefined) {
+                reject(`Missing room id.`)
+                return
+              }
+
               fetch(`http://localhost:3632/api/auth`, {
                 method: 'POST',
                 credentials: 'include'
@@ -43,6 +46,10 @@ const App = () => {
                       method: 'GET',
                       credentials: 'include'
                     }).then(res => {
+                      if (res.status === 404)
+                        reject(`This room does not exist.`)
+                      if (res.status !== 200)
+                        reject(`${res.status}: ${res.statusText}`)
                       res.json().then(resJSON => {
                         const scheduleData = {
                           eventName: resJSON.event_name,
@@ -57,17 +64,21 @@ const App = () => {
                           slotLength: resJSON.slot_length,
                           userSchedule: resJSON.user_schedule,
                           othersSchedule: resJSON.others_schedule,
-                          others: resJSON.others_names
+                          others: resJSON.others_names,
+                          absentReasons: resJSON.absent_reasons
                         }
-                        const userName = resJSON.user_name ?? ''
-                        const isOwner = resJSON.is_owner ?? false
 
-                        resolve({
+                        const userName: string = resJSON.user_name
+                        const isOwner: boolean = resJSON.is_owner
+
+                        const joinData = {
                           scheduleData,
                           userName,
                           isOwner,
-                          roomUid: roomUid ?? ''
-                        })
+                          roomUid
+                        }
+
+                        resolve(joinData)
                       })
                     })
                   } else {
@@ -82,7 +93,9 @@ const App = () => {
           path: '/about',
           element: <About />
         }
-      ]
+      ],
+
+      errorElement: <ErrorBoundary />
     }
   ])
 
@@ -92,7 +105,25 @@ const App = () => {
         router={router}
         fallbackElement={
           <div className="flex flex-row h-[100vh] justify-center items-center">
-            <p>Loading...</p>
+            <svg className="w-7 h-7 animate-spin" viewBox="0 0 10 10">
+              <circle
+                cx={5}
+                cy={5}
+                r={4}
+                fill="none"
+                className="stroke-primary"
+                strokeWidth={1.4}
+              />
+              <circle
+                cx={5}
+                cy={5}
+                r={4}
+                fill="none"
+                className="stroke-secondary"
+                strokeWidth={1.4}
+                strokeDasharray={4 * 2 * Math.PI * 0.666}
+              />
+            </svg>
           </div>
         }
       />
@@ -101,18 +132,18 @@ const App = () => {
 }
 
 const ErrorBoundary = () => {
-  let error = useRouteError()
-  console.error(error)
+  let rawError: any = useRouteError()
+
   return (
     <div className="flex flex-col gap-4 flex-grow justify-center items-center">
       <div className="text-lg">Dang an error!</div>
-      <div>{String(error)}</div>
+      <div>{rawError?.status === 404 ? '404: Page not found.' : rawError}</div>
     </div>
   )
 }
 
 const Layout = () => (
-  <div className="py-8 px-8 min-h-[100vh] grid grid-rows-[auto_1fr_auto] gap-y-8">
+  <div className="flex-1 grid grid-rows-[auto_1fr_auto] gap-y-8">
     <Header />
     <Outlet />
     <Footer />

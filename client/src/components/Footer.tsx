@@ -15,35 +15,37 @@ const Footer = () => {
 
   return (
     <footer className="text-sm text-primary font-medium text-gold grid grid-cols-3 justify-between items-end select-none">
-      <div className="grid grid-flow-row-dense grid-cols-2 grid-rows-2 gap-2 w-fit">
+      <div className="flex flex-row flex-wrap gap-x-4 gap-y-2 justify-start flex-shrink ">
         <Link
           to="/about"
-          className="flex flex-row gap-2 items-center hover:text-primary/90 "
+          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
         >
           <FontAwesomeIcon icon={faQuestion} />
           <div>about</div>
         </Link>
         <a
-          className="flex flex-row gap-2 items-center hover:text-primary/90 "
+          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           href="mailto:tom@tominomi.com"
         >
           <FontAwesomeIcon icon={faEnvelope} />
           <div>contact</div>
         </a>
         <a
-          className="flex flex-row gap-2 items-center hover:text-primary/90 "
+          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           href="https://github.com/typio/rsvp"
         >
           <FontAwesomeIcon icon={faGithubAlt} />
           <div>github</div>
         </a>
-        <a
-          className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 "
-          href="https://tominomi.com"
-        >
-          <FontAwesomeIcon icon={faHeart} />
-          <div>by thomas huber</div>
-        </a>
+        <div className="basis-full flex">
+          <a
+            className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 px-2"
+            href="https://tominomi.com"
+          >
+            <FontAwesomeIcon icon={faHeart} />
+            <div>by thomas huber</div>
+          </a>
+        </div>
       </div>
 
       <div className="flex flex-row justify-center">
@@ -82,7 +84,7 @@ const Footer = () => {
       <div className="flex flex-col gap-y-2 items-end">
         <span className="grid grid-flow-col w-max gap-2 items-center">
           <FontAwesomeIcon icon={faCopyright} />
-          <div> 2024</div>
+          <div>2024</div>
         </span>
       </div>
     </footer>

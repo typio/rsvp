@@ -23,4 +23,5 @@ export type ScheduleData = {
   userSchedule: boolean[][]
   othersSchedule: number[][][]
   others: string[]
+  absentReasons: (string | null)[]
 }

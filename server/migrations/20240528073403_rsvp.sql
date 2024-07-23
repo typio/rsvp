@@ -22,5 +22,7 @@ CREATE TABLE users_of_rooms (
     room_uid VARCHAR(36),
     name VARCHAR(64),
     is_owner BOOL,
+    is_absent BOOL,
+    absent_reason VARCHAR(1000),
     UNIQUE KEY unique_user (user_uid, room_uid)
 );

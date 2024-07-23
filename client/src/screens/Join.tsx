@@ -1,17 +1,33 @@
 import { useEffect, useState } from 'react'
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
+import { faQuestion, faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 import Schedule from '.././components/Schedule'
 import { ScheduleData } from '@/types'
-import { useLoaderData, useNavigate } from 'react-router-dom'
+import { NavigateFunction, useLoaderData, useNavigate } from 'react-router-dom'
 import tinycolor from 'tinycolor2'
 import { Colors } from '@/colors'
 import { useWebSocketContext } from '@/contexts/WebSocketContext'
+import { toast } from 'sonner'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from '@/components/ui/popover'
+
+import { Textarea } from '@/components/ui/textarea'
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
+import { debounce } from '@/utils'
 
 export type JoinRouteData = {
   scheduleData: ScheduleData
@@ -21,39 +37,98 @@ export type JoinRouteData = {
 }
 
 export const useWebSocketUpdates = (
-  setScheduleData: React.Dispatch<React.SetStateAction<ScheduleData>>
+  setScheduleData: React.Dispatch<React.SetStateAction<ScheduleData>>,
+  setIsSettingAbsentReason: React.Dispatch<React.SetStateAction<boolean>>,
+  sendMessage: any,
+  navigate: NavigateFunction
 ) => {
   const { lastMessage } = useWebSocketContext()
 
   useEffect(() => {
     if (lastMessage !== null) {
       if (lastMessage.data?.trim() === 'ping') {
-        console.log('ping')
+        sendMessage('pong')
       } else if (lastMessage.data?.trim() === 'pong') {
-        console.log('pong')
       } else {
-        const message = JSON.parse(lastMessage.data)
+        try {
+          let message = JSON.parse(lastMessage.data)
 
-        switch (message.message_type) {
-          case 'editEventName':
-            setScheduleData(prev => ({ ...prev, eventName: message.payload }))
-            break
-          case 'editUserName':
-            setScheduleData(prev => ({ ...prev, others: message.payload }))
-            break
-          case 'editSchedule':
-            setScheduleData(prev => ({
-              ...prev,
-              othersSchedule: message.payload
-            }))
-            break
-          default:
-            console.log('Unknown WebSocket message:', message)
+          switch (message.messageType) {
+            case 'editSchedule':
+              {
+                const { others, othersSchedule } = message.payload
+                setScheduleData(prev => ({
+                  ...prev,
+                  others,
+                  othersSchedule
+                }))
+              }
+              break
+            case 'editUserName':
+              {
+                const { others } = message.payload
+                setScheduleData(prev => ({ ...prev, others }))
+              }
+              break
+            case 'otherSetAbsentReason':
+              {
+                const { absentReasons, others, othersSchedule } =
+                  message.payload
+                setScheduleData(prev => ({
+                  ...prev,
+                  others,
+                  othersSchedule,
+                  absentReasons
+                }))
+              }
+              break
+            case 'userSetAbsentReason':
+              setIsSettingAbsentReason(false)
+              break
+            case 'editEventName':
+              setScheduleData(prev => ({ ...prev, eventName: message.payload }))
+              break
+            case 'roomDeleted':
+              toast.warning('Room was deleted by owner!', {
+                duration: 100_000,
+                cancel: { label: 'Dismiss', onClick: () => {} }
+              })
+              navigate('/')
+              break
+            default:
+              console.warn('Unknown WebSocket message:', message)
+          }
+        } catch (e: any) {
+          toast.error('Failed to parse WS message.', {
+            description: e,
+            cancel: {
+              label: 'Dismiss',
+              onClick: () => {}
+            }
+          })
         }
       }
     }
   }, [lastMessage, setScheduleData])
 }
+
+const excuses = [
+  "I'm not available during these times.",
+  'I no longer plan on attending this.'
+]
+
+const expandReason = (reason: string | number | null) =>
+  typeof reason === 'number' ? excuses[reason] : reason
+const expandReasons = (reasons: (string | number | null)[]) =>
+  reasons.map(reason => expandReason(reason))
+
+const indexReasons = (reasons: (string | null)[]) =>
+  reasons.map(reason => {
+    if (reason === null) return null
+    let eI = excuses.indexOf(reason)
+    if (eI === -1) return reason
+    else return eI
+  })
 
 const Join = () => {
   const { sendMessage, setRoomUid } = useWebSocketContext()
@@ -65,6 +140,8 @@ const Join = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>(
     loadData.scheduleData
   )
+  const userIsAbsent = scheduleData.absentReasons[0] !== null
+  const indexedAbsentReasons = indexReasons(scheduleData.absentReasons)
 
   const [userName, setUserName] = useState<string>(loadData.userName)
 
@@ -74,12 +151,19 @@ const Join = () => {
   const [hoveringUser, setHoveringUser] = useState<null | number>(null)
   const [hasHoveredUser, setHasHoveredUser] = useState(false)
 
+  const [isSettingAbsentReason, setIsSettingAbsentReason] = useState(false)
+
   useEffect(() => {
     setRoomUid(roomUid)
     return () => setRoomUid(null)
   }, [roomUid, setRoomUid])
 
-  useWebSocketUpdates(setScheduleData)
+  useWebSocketUpdates(
+    setScheduleData,
+    setIsSettingAbsentReason,
+    sendMessage,
+    navigate
+  )
 
   const editSchedule = (newSchedule: ScheduleData) => {
     setScheduleData(newSchedule)
@@ -95,38 +179,62 @@ const Join = () => {
   }
 
   const deleteRoom = async () => {
-    try {
-      const res = await fetch(`http://localhost:3632/api/rooms/${roomUid}`, {
-        method: 'DELETE',
-        credentials: 'include'
+    await fetch(`http://localhost:3632/api/rooms/${roomUid}`, {
+      method: 'DELETE',
+      credentials: 'include'
+    })
+      .then(res => {
+        if (res.status === 200) {
+          toast.success('Deleted room!')
+          navigate('/')
+        } else {
+          throw new Error(`Error ${res.status}: ${res.statusText}`)
+        }
       })
-      if (res.ok) {
-        navigate('/')
-      }
-    } catch (e) {
-      throw e
-    }
-  }
-
-  const reserveAbsent = async () => {
-    try {
-      const res = await fetch(`http://localhost:3632/api/rooms/${roomUid}`, {
-        method: 'DELETE',
-        credentials: 'include'
+      .catch((e: TypeError) => {
+        toast.error('Error deleting room.', {
+          description: e.message,
+          cancel: {
+            label: 'Dismiss',
+            onClick: () => {}
+          }
+        })
       })
-      if (res.ok) {
-        navigate('/')
-      }
-    } catch (e) {
-      throw e
-    }
   }
 
   const shareRoom = () => {
-    alert(window.location)
+    const shareURL = `https://cmon.rsvp/${roomUid}`
+    navigator.clipboard.writeText(shareURL)
+    toast.success(shareURL, {
+      description: 'Copied link to clipboard.',
+      position: 'top-right'
+    })
   }
 
   if (scheduleData === undefined) return null
+
+  const sendAbsentChange = (absentReason: string | number | null) => {
+    setIsSettingAbsentReason(true)
+
+    let absentReasonString = expandReason(absentReason)
+
+    sendMessage(
+      JSON.stringify({
+        message_type: 'editIsAbsent',
+        payload: {
+          user_name: userName,
+          absent_reason: absentReasonString
+        }
+      })
+    )
+  }
+
+  const sendAbsentChangeDebounced = debounce(
+    (absentReason: string | number | null) => {
+      sendAbsentChange(absentReason)
+    },
+    1000
+  )
 
   return (
     <main className="gap-x-8">
@@ -142,31 +250,153 @@ const Join = () => {
         />
 
         <UserList
-          scheduleData={scheduleData}
+          others={scheduleData.others}
           hoveringUser={hoveringUser}
           setHoveringUser={setHoveringUser}
           hasHoveredUser={hasHoveredUser}
           setHasHoveredUser={setHasHoveredUser}
           hoveredSlotUsers={hoveredSlotUsers}
+          absentReasons={expandReasons(scheduleData.absentReasons)}
         />
 
-        {scheduleData && scheduleData.dates.dates.length > 0 && (
-          <Schedule
-            data={scheduleData}
-            isCreate={false}
-            hoveringUser={hoveringUser}
-            setHoveredSlotUsers={setHoveredSlotUsers}
-            editSchedule={editSchedule}
-          />
-        )}
+        <div>
+          {scheduleData && scheduleData.dates.dates.length > 0 && (
+            <Schedule
+              data={scheduleData}
+              isCreate={false}
+              hoveringUser={hoveringUser}
+              setHoveredSlotUsers={setHoveredSlotUsers}
+              editSchedule={editSchedule}
+            />
+          )}
+        </div>
 
-        <Button
-          variant={'destructive'}
-          className="mt-4"
-          onClick={isOwner ? deleteRoom : reserveAbsent}
-        >
-          {isOwner ? 'Delete Event' : "I can't make it."}
-        </Button>
+        <div className="mt-4 flex justify-center">
+          {isOwner ? (
+            <Button variant={'destructive'} onClick={deleteRoom}>
+              Delete Event
+            </Button>
+          ) : (
+            <div className="flex flex-row gap-x-2 relative">
+              <Button
+                className={`rounded-md border border-b-[3px] border-blue-950 h-10 text-destructive hover:bg-destructive hover:text-destructive-foreground hover:border-red-800 ${userIsAbsent ? 'text-destructive-foreground bg-destructive border-b h-[38px] mt-[2px] border-red-800' : ''}`}
+                onClick={() => {
+                  if (!userIsAbsent) {
+                    // clear schedule
+                    editSchedule({
+                      ...scheduleData,
+                      userSchedule: [...scheduleData.userSchedule].map(day =>
+                        day.map(_ => false)
+                      )
+                    })
+                  }
+
+                  const newAbsentReason = userIsAbsent ? null : ''
+                  setScheduleData(prev => ({
+                    ...prev,
+                    absentReasons: [
+                      newAbsentReason,
+                      ...scheduleData.absentReasons.slice(1)
+                    ]
+                  }))
+                  sendAbsentChange(newAbsentReason)
+                }}
+              >
+                I can't make it.
+              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    className={`bg-background duration-200 mt-[2px] h-[38px] transition-all absolute left-[100%] hover:bg-background hover:text-primary hover:ring-2 hover:ring-offset-0 hover:ring-primary disabled:opacity-0 ${userIsAbsent ? 'opacity-100 ml-3' : 'opacity-0 ml-0'}`}
+                    disabled={!userIsAbsent}
+                  >
+                    <FontAwesomeIcon icon={faQuestion} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent>
+                  <div className="text-sm flex flex-col gap-y-2">
+                    <div className="mb-2 text-sm font-medium text-muted-foreground">
+                      Reason for absense (optional)
+                    </div>
+                    {excuses.map((excuse, i) => (
+                      <Button
+                        key={i}
+                        variant="ghost"
+                        className={`flex flex-wrap text-wrap h-fit ${indexedAbsentReasons[0] === i ? 'text-foreground/95' : 'hover:text-foreground/90'}`}
+                        onClick={() => {
+                          // Toggle set button value
+                          let newAbsentReason =
+                            indexedAbsentReasons[0] !== i ? excuses[i] : ''
+
+                          setScheduleData(prev => ({
+                            ...prev,
+                            absentReasons: [
+                              newAbsentReason,
+                              ...scheduleData.absentReasons.slice(1)
+                            ]
+                          }))
+                          sendAbsentChange(newAbsentReason)
+                        }}
+                      >
+                        {excuse}
+                      </Button>
+                    ))}
+                    <div className="flex flex-col">
+                      <div className="flex flex-row mb-1 mx-2 items-center justify-between">
+                        <label className="text-sm mt-2 font-medium text-muted-foreground">
+                          Custom reason
+                        </label>
+
+                        <svg
+                          className="w-4 h-4 animate-spin"
+                          viewBox="0 0 10 10"
+                          style={{ opacity: isSettingAbsentReason ? 1 : 0 }}
+                        >
+                          <circle
+                            cx={5}
+                            cy={5}
+                            r={4}
+                            fill="none"
+                            className="stroke-primary"
+                            strokeWidth={1.4}
+                          />
+                          <circle
+                            cx={5}
+                            cy={5}
+                            r={4}
+                            fill="none"
+                            className="stroke-secondary"
+                            strokeWidth={1.4}
+                            strokeDasharray={4 * 2 * Math.PI * 0.666}
+                          />
+                        </svg>
+                      </div>
+                      <Textarea
+                        className="max-h-[50vh]"
+                        value={
+                          typeof indexedAbsentReasons[0] == 'string'
+                            ? indexedAbsentReasons[0]
+                            : ''
+                        }
+                        onChange={e => {
+                          let value = e.currentTarget.value
+                          setScheduleData(prev => ({
+                            ...prev,
+                            absentReasons: [
+                              value,
+                              ...scheduleData.absentReasons.slice(1)
+                            ]
+                          }))
+                          sendAbsentChangeDebounced(value.trim())
+                        }}
+                      />
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+        </div>
       </div>
     </main>
   )
@@ -189,7 +419,7 @@ const EventDetails = ({
   sendMessage: (arg0: string) => void
   shareRoom: () => void
 }) => (
-  <div className="flex flex-col gap-y-2 mb-4 bg-card shadow-xl p-4 rounded-md">
+  <div className="flex flex-col gap-y-2 mb-4 bg-card shadow-xl p-4 rounded-md ">
     <div className="flex flex-row gap-x-4 items-end">
       {isOwner ? (
         <div className="flex flex-col gap-y-1 flex-1">
@@ -249,19 +479,21 @@ const EventDetails = ({
 )
 
 const UserList = ({
-  scheduleData,
+  others,
   hoveringUser,
   setHoveringUser,
   hasHoveredUser,
   setHasHoveredUser,
-  hoveredSlotUsers
+  hoveredSlotUsers,
+  absentReasons
 }: {
-  scheduleData: ScheduleData
+  others: string[]
   hoveringUser: number | null
   setHoveringUser: (arg0: any) => void
   hasHoveredUser: boolean
   setHasHoveredUser: (arg0: any) => void
   hoveredSlotUsers: boolean[] | null
+  absentReasons: (string | null)[]
 }) => (
   <div className="flex flex-row justify-between">
     <UserItem
@@ -273,10 +505,11 @@ const UserList = ({
       setHasHoveredUser={setHasHoveredUser}
       hoveredSlotUsers={hoveredSlotUsers}
       isCurrentUser={true}
+      absentReason={absentReasons[0]}
     />
 
     <div className="flex flex-row gap-x-4 items-center">
-      {scheduleData?.others?.map((user: string, i) => (
+      {others?.map((user: string, i) => (
         <UserItem
           key={i}
           user={user}
@@ -287,6 +520,7 @@ const UserList = ({
           setHasHoveredUser={setHasHoveredUser}
           hoveredSlotUsers={hoveredSlotUsers}
           isCurrentUser={false}
+          absentReason={absentReasons[i + 1]}
         />
       ))}
     </div>
@@ -301,7 +535,8 @@ const UserItem = ({
   hasHoveredUser,
   setHasHoveredUser,
   hoveredSlotUsers,
-  isCurrentUser
+  isCurrentUser,
+  absentReason
 }: {
   user: string
   index: number
@@ -311,48 +546,71 @@ const UserItem = ({
   setHasHoveredUser: (arg0: any) => void
   hoveredSlotUsers: boolean[] | null
   isCurrentUser: boolean
-}) => (
-  <div
-    className={`flex flex-row gap-x-2 items-center duration-75 ${isCurrentUser ? 'select-none' : ''}`}
-    style={{
-      opacity:
-        (hoveringUser != null && hoveringUser != index) ||
-        (hoveredSlotUsers !== null && !hoveredSlotUsers[index])
-          ? 0
-          : 1,
-      '--user-color': isCurrentUser
-        ? Colors.userColor
-        : Colors.othersColors[index - 1],
-      '--bright-user-color': tinycolor(
-        isCurrentUser ? Colors.userColor : Colors.othersColors[index - 1]
-      )
-        .brighten(20)
-        .toRgbString(),
-      animation:
-        hoveringUser === index
-          ? 'glowAnimation 0.3s forwards, flameFlicker 1.75s ease-in-out infinite 0.3s, flamePulse 3s ease-in-out infinite 0.3s'
-          : hasHoveredUser
-            ? 'glowFadeOut 0.3s forwards'
-            : ''
-    }}
-    onMouseEnter={() => {
-      setHoveringUser(index)
-      setHasHoveredUser(true)
-    }}
-    onMouseLeave={() => setHoveringUser(null)}
-  >
-    <div>
-      {isCurrentUser ? user : user?.length > 0 ? user : `User ${index}`}
-    </div>
-    <div
-      className={`w-3 h-3 ${isCurrentUser ? 'rounded bg-secondary' : 'rounded-full'}`}
-      style={
-        !isCurrentUser
-          ? { backgroundColor: Colors.othersColors[index - 1] }
-          : {}
-      }
-    />
-  </div>
-)
+  absentReason: string | null
+}) => {
+  const isAbsent = absentReason !== null
+
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={0} open={isAbsent ? undefined : false}>
+        <TooltipTrigger>
+          <div
+            className={`flex flex-row justify-center items-center gap-x-2 duration-75 ${isCurrentUser ? 'select-none' : ''}`}
+            style={{
+              opacity:
+                (hoveringUser != null && hoveringUser != index) ||
+                (hoveredSlotUsers !== null && !hoveredSlotUsers[index])
+                  ? 0
+                  : 1,
+              '--user-color': isCurrentUser
+                ? Colors.userColor
+                : Colors.othersColors[index - 1],
+              '--bright-user-color': tinycolor(
+                isCurrentUser
+                  ? Colors.userColor
+                  : Colors.othersColors[index - 1]
+              )
+                .brighten(20)
+                .toRgbString(),
+              animation:
+                hoveringUser === index || (hoveredSlotUsers ?? []).length > 0
+                  ? 'glowAnimation 0.3s forwards, flameFlicker 1.75s ease-in-out infinite 0.3s, flamePulse 3s ease-in-out infinite 0.3s'
+                  : hasHoveredUser
+                    ? 'glowFadeOut 0.3s forwards'
+                    : ''
+            }}
+            onMouseEnter={() => {
+              setHoveringUser(index)
+              setHasHoveredUser(true)
+            }}
+            onMouseLeave={() => setHoveringUser(null)}
+          >
+            <div className={`${isAbsent ? 'line-through' : ''}`}>
+              {isCurrentUser ? user : user?.length > 0 ? user : `User ${index}`}
+            </div>
+
+            {!isAbsent && (
+              <div
+                className={`w-3 h-3 ${isCurrentUser ? 'rounded bg-secondary' : 'rounded-full'} `}
+                style={
+                  !isCurrentUser
+                    ? { backgroundColor: Colors.othersColors[index - 1] }
+                    : {}
+                }
+              />
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="py-3 px-4">
+          {(absentReason?.trim() ?? '').length > 0 ? (
+            <p>{absentReason?.trim()}</p>
+          ) : (
+            <p className=" text-muted-foreground">This user can't make it.</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
 
 export default Join

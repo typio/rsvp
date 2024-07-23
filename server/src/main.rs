@@ -11,6 +11,7 @@ use models::State;
 use dotenv::dotenv;
 use sqlx::mysql::MySqlPool;
 use std::env;
+use tide::http::headers::HeaderValue;
 use tide::security::CorsMiddleware;
 use tide::security::Origin;
 use tide_websockets::WebSocket;
@@ -23,6 +24,7 @@ async fn main() -> tide::Result<()> {
     let mut app = tide::with_state(State::new(pool));
 
     let cors = CorsMiddleware::new()
+        .allow_methods("GET, POST, DELETE".parse::<HeaderValue>().unwrap())
         .allow_origin(Origin::from("http://localhost:5173"))
         .allow_credentials(true);
 
@@ -31,7 +33,7 @@ async fn main() -> tide::Result<()> {
     app.at("/api/auth").post(auth::authenticate);
     app.at("/api/rooms").post(room::create_room);
     app.at("/api/rooms/:room_uid").get(room::get_room);
-    app.at("/api/delete/:room_uid").post(room::delete_room);
+    app.at("/api/rooms/:room_uid").delete(room::delete_room);
 
     app.at("/api/ws/:room_uid")
         .with(WebSocket::new(websocket::connect_websocket))

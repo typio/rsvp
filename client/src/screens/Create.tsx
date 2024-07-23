@@ -111,7 +111,7 @@ const CreateOptions = ({
               </Label>
               <div className="flex flex-row gap-x-2">
                 <Input
-                  className="w-12 text-center"
+                  className={`w-12 text-center ${timeInputs.from !== scheduleData.timeRange.from.hour ? 'ring-2 ring-offset-0 ring-red-500 focus-visible:ring-red-500' : ''}`}
                   onChange={e => {
                     handleTimeInput(e.target.value, true)
                   }}
@@ -143,7 +143,7 @@ const CreateOptions = ({
               </Label>
               <div className="flex flex-row gap-x-2">
                 <Input
-                  className="w-12 text-center"
+                  className={`w-12 text-center ${timeInputs.to !== scheduleData.timeRange.to.hour ? 'ring-2 ring-offset-0 ring-red-500 focus-visible:ring-red-500' : ''}`}
                   onChange={e => {
                     handleTimeInput(e.target.value, false)
                   }}

@@ -20,7 +20,7 @@
     --secondary-foreground: 212 100% 98%;
     --accent: 174 53% 68%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 95% 60%;
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 100% 92%;
     --ring: 51 100% 50%;
     --radius: 0.75rem;
@@ -30,6 +30,20 @@
   * {
     @apply border-border;
   }
+
+  *:focus {
+    outline: none;
+  }
+
+  *:focus:not(:focus-visible) {
+    @apply outline-none;
+  }
+
+  *:focus-visible {
+    outline: none;
+    @apply ring-2 ring-offset-4 ring-offset-background rounded-md ring-primary;
+  }
+
   body {
     @apply bg-background text-foreground;
   }

@@ -25,15 +25,17 @@ impl State {
     }
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct UserOfRoom {
     pub room_uid: String,
     pub user_uid: String,
     pub name: String,
     pub is_owner: bool,
+    pub is_absent: bool,
+    pub absent_reason: String,
 }
 
-#[derive(Debug, Clone, sqlx::FromRow)]
+#[derive(Clone, sqlx::FromRow)]
 pub struct Room {
     pub uid: String,
     pub schedule_type: u8,
@@ -47,19 +49,19 @@ pub struct Room {
     pub expires_at: time_new::OffsetDateTime,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct TimeRange {
     pub from_hour: u8,
     pub to_hour: u8,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct WSMessage {
     pub message_type: String,
     pub payload: serde_json::Value,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct GetRoomRes {
     pub event_name: String,
     pub schedule_type: u8,
@@ -72,16 +74,17 @@ pub struct GetRoomRes {
     pub others_names: Vec<String>,
     pub time_range: TimeRange,
     pub is_owner: bool,
+    pub absent_reasons: Vec<Option<String>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ScheduleDates {
     Dates(Vec<String>),
     DaysOfWeek(Vec<u8>),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CreateRoomReq {
     pub event_name: String,
     pub schedule_type: u8, // NOTE: I want to use an enum but sqlx nor TS+serde work well
@@ -89,4 +92,9 @@ pub struct CreateRoomReq {
     pub slot_length: u8,
     pub schedule: Vec<Vec<bool>>,
     pub time_range: TimeRange,
+}
+
+#[derive(Serialize)]
+pub struct RoomDeletedPing {
+    pub message_type: String,
 }

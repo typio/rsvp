@@ -17,6 +17,7 @@ pub async fn connect_websocket(
 ) -> tide::Result<()> {
     let user_uid = get_user_uid_from_cookie(&req).await;
     let room_uid = req.param("room_uid").unwrap();
+
     let state = req.state().clone();
 
     // Add connection
@@ -33,7 +34,7 @@ pub async fn connect_websocket(
     let mut interval = async_std::stream::interval(std::time::Duration::from_secs(15));
 
     let mut last_pong = Instant::now();
-    let heartbeat_timeout = Duration::from_secs(30);
+    let heartbeat_timeout = Duration::from_secs(25);
 
     loop {
         select! {
@@ -42,7 +43,8 @@ pub async fn connect_websocket(
                     println!("Client failed to respond to ping, closing connection.");
                     break;
                 }
-                if let Err(_) = wsc.send(tide_websockets::Message::Ping(vec![])).await {
+                // if let Err(_) = wsc.send(tide_websockets::Message::Ping(vec![])).await {
+                if let Err(_) = wsc.send(tide_websockets::Message::Text("ping".to_string())).await {
                     break;
                 }
             },
@@ -135,6 +137,7 @@ pub async fn handle_websocket_message(
             let user_schedule: Vec<Vec<bool>> =
                 serde_json::from_value(msg.payload["user_schedule"].clone())?;
 
+            // TODO: OR get default name!
             let user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
 
             #[derive(Debug, Serialize, Deserialize)]
@@ -149,29 +152,29 @@ pub async fn handle_websocket_message(
                 users: Vec<String>,
             }
 
-            // TODO: only allow current limit of 6 users per room (including owner)
-            // send an error message back that creates a toast
-
             // If user isn't in room add them
-            let _ = sqlx::query!(
+            let users_inserted_count = sqlx::query!(
                 r#"
-                    INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner)
-                    VALUES (?, ?, ?, ?);
-                    "#,
+                    INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
+                    VALUES (?, ?, ?, ?, ?, ?);
+                "#,
                 user_uid,
                 room_uid,
                 user_name,
-                false
+                false,
+                false,
+                ""
             )
             .execute(&mut *transaction)
-            .await;
+            .await?
+            .rows_affected();
 
             // get schedule as in DB
             let room: Room = sqlx::query_as(
                 r#"
                     SELECT * FROM rooms
                     WHERE uid=?
-                    "#,
+                "#,
             )
             .bind(&room_uid)
             .fetch_one(&mut *transaction)
@@ -219,12 +222,12 @@ pub async fn handle_websocket_message(
                     .unwrap();
 
                 let _ = wsc
-                    .send_json(&WSMessage {
-                        message_type: String::from("editSchedule"),
-                        // TODO: Change this to a bool array for more efficient rendering on the
-                        // client
-                        payload: room_data.others_schedule.into(),
-                    })
+                    .send_json(&json!({
+                    "messageType": "editSchedule",
+                    "payload": {
+                        "others": room_data.others_names,
+                        "othersSchedule": room_data.others_schedule,
+                    }}))
                     .await;
             }
         }
@@ -260,31 +263,26 @@ pub async fn handle_websocket_message(
                 .execute(&state.db_pool)
                 .await?;
 
-                #[derive(Serialize, Deserialize)]
-                struct EditEventNamePing {
-                    message_type: String,
-                    payload: String,
-                }
-
                 for (this_user_uid, user_wsc) in
                     state.rooms.lock().await.get(&room_uid).unwrap().iter()
                 {
                     if *this_user_uid != user_uid {
                         let _ = user_wsc
-                            .send_json(&EditEventNamePing {
-                                message_type: "editEventName".to_string(),
-                                payload: event_name_payload.name.to_string(),
-                            })
+                            .send_json(&json!( {
+                                "messageType": "editEventName",
+                                "payload": {"eventName": event_name_payload.name},
+                            }))
                             .await;
                     }
                 }
             }
         }
         "editUserName" => {
-            #[derive(Debug, Serialize, Deserialize)]
+            #[derive(Deserialize)]
             struct EditUserNamePayload {
                 name: String,
             }
+
             let user_name_payload: EditUserNamePayload =
                 serde_json::from_value(msg.payload).unwrap();
 
@@ -311,12 +309,6 @@ pub async fn handle_websocket_message(
             .fetch_all(&state.db_pool)
             .await?;
 
-            #[derive(Serialize, Deserialize)]
-            struct EditUserNamePing {
-                message_type: String,
-                payload: Vec<String>,
-            }
-
             for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
             {
                 if *this_user_uid != user_uid {
@@ -331,15 +323,91 @@ pub async fn handle_websocket_message(
                     );
 
                     let _ = user_wsc
-                        .send_json(&EditUserNamePing {
-                            message_type: "editUserName".to_string(),
-                            payload: others_names,
-                        })
+                        .send_json(&json!({
+                            "messageType": "editUserName",
+                            "payload": { "others": others_names},
+                        }))
                         .await;
                 }
             }
         }
-        _ => return Err("Unknown message_type".into()),
+        "editIsAbsent" => {
+            let user_of_room: Result<UserOfRoom, sqlx::Error> = sqlx::query_as(
+                r#"
+                    SELECT * FROM users_of_rooms
+                    WHERE user_uid=? AND room_uid=?
+                "#,
+            )
+            .bind(user_uid.clone())
+            .bind(room_uid.clone())
+            .fetch_one(&state.db_pool)
+            .await;
+
+            let user_of_room = match user_of_room {
+                Ok(res) => Some(res),
+                Err(sqlx::Error::RowNotFound) => None,
+                Err(e) => return Err(e.into()),
+            };
+
+            if user_of_room.is_some() && user_of_room.unwrap().is_owner {
+                return Err("Owner can't be absent.".into());
+            }
+
+            // TODO: OR get default name!
+            let user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
+            let absent_reason: Option<String> =
+                serde_json::from_value(msg.payload["absent_reason"].clone())?;
+
+            let is_absent = !absent_reason.is_none();
+
+            let absent_reason: String = absent_reason.unwrap_or("".to_string());
+
+            // Set absent, and if user isn't in room add them
+            let _ = sqlx::query!(
+                r#"
+                    INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
+                    VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE is_absent=?, absent_reason=?;
+                "#,
+                user_uid,
+                room_uid,
+                user_name,
+                false,
+                is_absent,
+                absent_reason,
+
+                is_absent,
+                absent_reason
+            )
+            .execute(&state.db_pool)
+            .await;
+
+            for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
+            {
+                if *this_user_uid == user_uid {
+                    let _ = user_wsc
+                        .send_json(&json!({
+                            "messageType": "userSetAbsentReason",
+                        }))
+                        .await;
+                } else {
+                    let room_data = process_room_data(&state, &room_uid, &this_user_uid)
+                        .await
+                        .unwrap();
+
+                    let _ = user_wsc
+                        .send_json(&json!({
+                            "messageType": "otherSetAbsentReason",
+                            "payload": {
+                            "othersSchedule": room_data.others_schedule,
+                            "others": room_data.others_names,
+                            "absentReasons": room_data.absent_reasons
+                        }
+                        }))
+                        .await;
+                }
+            }
+        }
+        _ => return Err("Unknown message type".into()),
     };
 
     Ok(())

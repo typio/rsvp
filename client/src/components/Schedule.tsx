@@ -42,7 +42,7 @@ export type Selection = {
 export const shareRoom = (
   scheduleData: ScheduleData,
   navigate: NavigateFunction
-) => {
+): boolean => {
   let req = JSON.stringify({
     event_name: scheduleData.eventName,
     schedule_type: scheduleData.dates.mode,
@@ -71,9 +71,10 @@ export const shareRoom = (
       if (res.status === 200) {
         res.json().then(resJSON => {
           navigate(`/${resJSON.room_uid}`)
+          return true
         })
       } else {
-        throw new Error(res.statusText)
+        throw new Error(`Error ${res.status}: ${res.statusText}`)
       }
     })
     .catch((e: TypeError) =>
@@ -85,6 +86,7 @@ export const shareRoom = (
         }
       })
     )
+  return false
 }
 
 type TimeCalculations = {
@@ -340,7 +342,7 @@ const DayColumn = ({
         </div>
         <div
           id="slot-column"
-          className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5"
+          className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5 cursor-pointer "
         >
           {Array.from({ length: hoursPerColumn })?.map((_, i) => {
             return (
@@ -447,7 +449,7 @@ const Slot = ({
     >
       <div className={`relative w-full h-full bg-background overflow-hidden `}>
         <div
-          className="absolute w-full h-full duration-150"
+          className="absolute w-full h-full"
           style={{
             opacity: alpha,
             background: slotColor?.toHexString()
@@ -481,10 +483,10 @@ const ScheduleControls = () => {
   return (
     <div className="flex flex-row justify-between pt-7 gap-4">
       <div className="flex flex-row gap-4">
-        {!isCreate && (
+        {!isCreate && false && (
           <Button
             onClick={() => {
-              shareRoom(data, navigate)
+              if (shareRoom(data, navigate)) toast.success('Created new room.')
             }}
           >
             <FontAwesomeIcon icon={faClone} />
