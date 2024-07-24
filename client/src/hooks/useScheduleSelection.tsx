@@ -1,6 +1,7 @@
 import { Selection } from '@/components/Schedule'
 import { ScheduleData } from '@/types'
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 export type ScheduleSelectionContextType = {
   currentSelection: Selection
@@ -113,6 +114,12 @@ export const useScheduleSelection = (
     timeIndex: number,
     isSelected: boolean
   ) => {
+    if (initialData.absentReasons[0] !== null) {
+    toast.error("You can't select times while marked absent.", {description: "If you'd like to select times, please unselect the \"I can't make it.\" button." , 
+      })
+      return
+    }
+
     setIsMouseDown(true)
     setCurrentSelection({
       range: {

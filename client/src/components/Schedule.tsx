@@ -191,9 +191,9 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
           className="flex flex-row"
           style={{ marginLeft: TIME_COL_WIDTH }}
         ></div>
-        <div className="flex flex-row">
+        <div className="flex flex-row ">
           <div
-            className="flex flex-col justify-between font-time text-sm text-right"
+            className="flex flex-col justify-between font-time text-sm text-right "
             style={{
               width: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
               paddingRight: 12,
@@ -225,7 +225,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
           </div>
 
           <div
-            className="flex flex-row flex-1 basis-1 gap-x-1"
+            className="flex flex-row flex-1 basis-1 gap-x-1 overflow-x-scroll "
             id="slot-parent"
           >
             {data.dates.dates.map((date, dateIndex) => {

@@ -29,7 +29,13 @@ export const WebSocketProvider: React.FC<React.PropsWithChildren<{}>> = ({
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(socketUrl, {
     shouldReconnect: () => roomUid !== null,
-    heartbeat: true
+    heartbeat: true,
+    onMessage: event => {
+      const data = event.data.trim()
+      if (data === 'ping') {
+        sendMessage('pong')
+      }
+    }
   })
 
   return (

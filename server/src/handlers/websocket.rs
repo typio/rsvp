@@ -227,6 +227,7 @@ pub async fn handle_websocket_message(
                     "payload": {
                         "others": room_data.others_names,
                         "othersSchedule": room_data.others_schedule,
+                        "absentReasons": room_data.absent_reasons
                     }}))
                     .await;
             }
@@ -384,9 +385,19 @@ pub async fn handle_websocket_message(
             for (this_user_uid, user_wsc) in state.rooms.lock().await.get(&room_uid).unwrap().iter()
             {
                 if *this_user_uid == user_uid {
+                    let room_data = process_room_data(&state, &room_uid, &this_user_uid)
+                        .await
+                        .unwrap();
+
                     let _ = user_wsc
                         .send_json(&json!({
                             "messageType": "userSetAbsentReason",
+
+                            "payload": {
+                            "othersSchedule": room_data.others_schedule,
+                            "others": room_data.others_names,
+                            "absentReasons": room_data.absent_reasons
+                        }
                         }))
                         .await;
                 } else {

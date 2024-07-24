@@ -17,6 +17,7 @@ export type H12TimeRange = {
 
 export type ScheduleData = {
   eventName: string
+  userName: string
   dates: SelectedDates
   slotLength: number
   timeRange: H12TimeRange

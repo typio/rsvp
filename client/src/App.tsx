@@ -53,6 +53,7 @@ const App = () => {
                       res.json().then(resJSON => {
                         const scheduleData = {
                           eventName: resJSON.event_name,
+                          userName: resJSON.user_name,
                           dates: {
                             mode: resJSON.schedule_type,
                             dates:
@@ -68,12 +69,10 @@ const App = () => {
                           absentReasons: resJSON.absent_reasons
                         }
 
-                        const userName: string = resJSON.user_name
                         const isOwner: boolean = resJSON.is_owner
 
                         const joinData = {
                           scheduleData,
-                          userName,
                           isOwner,
                           roomUid
                         }
