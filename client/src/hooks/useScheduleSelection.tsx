@@ -115,7 +115,9 @@ export const useScheduleSelection = (
     isSelected: boolean
   ) => {
     if (initialData.absentReasons[0] !== null) {
-    toast.error("You can't select times while marked absent.", {description: "If you'd like to select times, please unselect the \"I can't make it.\" button." , 
+      toast.error("You can't select times while marked absent.", {
+        description:
+          'To select times, please unselect the "I can\'t make it." button.'
       })
       return
     }

@@ -1,6 +1,6 @@
 import { faClone, faEraser } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useEffect } from 'react'
+import { memo, useEffect } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
 import { h12To24 } from '@/utils'
@@ -177,6 +177,10 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
 
     editSchedule(newData)
   }, [data.dates, time.slotsPerColumn])
+
+  useEffect(() => {
+    console.log('Schedule Content render')
+  }, [])
 
   return (
     <div

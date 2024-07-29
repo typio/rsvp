@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import { debounce } from '@/utils'
+import { useDebounce } from '@/utils'
 
 export type JoinRouteData = {
   scheduleData: ScheduleData
@@ -40,77 +40,97 @@ export const useWebSocketUpdates = (
   setIsSettingAbsentReason: React.Dispatch<React.SetStateAction<boolean>>,
   navigate: NavigateFunction
 ) => {
-  const { lastMessage } = useWebSocketContext()
+  const { addMessageHandler, removeMessageHandler } = useWebSocketContext()
 
   useEffect(() => {
-    if (lastMessage !== null) {
-      const messageData = lastMessage.data?.trim()
-      if (messageData === 'ping' || messageData === 'pong') return
+    const handlers = {
+      editSchedule: ({
+        userName,
+        others,
+        othersSchedule,
+        absentReasons
+      }: {
+        userName: string
+        others: string[]
+        othersSchedule: number[][][]
+        absentReasons: (string | null)[]
+      }) => {
+        setScheduleData(prev => ({
+          ...prev,
+          userName,
+          others,
+          othersSchedule,
+          absentReasons
+        }))
+      },
 
-      try {
-        let message = JSON.parse(messageData)
+      editUserName: ({ others }: { others: string[] }) => {
+        setScheduleData(prev => ({ ...prev, others }))
+      },
 
-        switch (message.messageType) {
-          case 'editSchedule':
-            {
-              const { absentReasons, others, othersSchedule } = message.payload
-              setScheduleData(prev => ({
-                ...prev,
-                others,
-                othersSchedule,
-                absentReasons
-              }))
-            }
-            break
-          case 'editUserName':
-            {
-              const { others } = message.payload
-              setScheduleData(prev => ({ ...prev, others }))
-            }
-            break
-          case 'otherSetAbsentReason':
-            {
-              const { absentReasons, others, othersSchedule } = message.payload
-              console.log(absentReasons, others)
-              setScheduleData(prev => ({
-                ...prev,
-                others,
-                othersSchedule,
-                absentReasons
-              }))
-            }
-            break
-          case 'userSetAbsentReason':
-            setIsSettingAbsentReason(false)
-            setScheduleData(prev => ({
-              ...prev,
-              absentReasons: message.payload.absentReasons
-            }))
-            break
-          case 'editEventName':
-            setScheduleData(prev => ({ ...prev, eventName: message.payload }))
-            break
-          case 'roomDeleted':
-            toast.warning('Room was deleted by owner!', {
-              duration: Infinity,
-              cancel: { label: 'Dismiss', onClick: () => {} }
-            })
-            navigate('/')
-            break
-          default:
-            console.warn('Unknown WebSocket message:', message)
-        }
-      } catch (e: any) {
-        toast.error('Failed to parse WS message.', {
-          description: e,
-          cancel: {
-            label: 'Dismiss',
-            onClick: () => {}
-          }
+      otherSetAbsentReason: ({
+        absentReasons,
+        others,
+        othersSchedule
+      }: {
+        absentReasons: (string | null)[]
+        others: string[]
+        othersSchedule: number[][][]
+      }) => {
+        setScheduleData(prev => ({
+          ...prev,
+          others,
+          othersSchedule,
+          absentReasons
+        }))
+      },
+
+      userSetAbsentReason: ({
+        absentReasons
+      }: {
+        absentReasons: (string | null)[]
+      }) => {
+        setIsSettingAbsentReason(false)
+
+        // If the user wasn't absent it just make it so they are, doing it all the time overwrites the input
+        setScheduleData(prev => ({
+          ...prev,
+          absentReasons: [
+            absentReasons[0] === null ? null : prev.absentReasons[0],
+            ...absentReasons.slice(1)
+          ]
+        }))
+      },
+
+      editEventName: ({ eventName }: { eventName: string }) => {
+        setScheduleData(prev => ({ ...prev, eventName }))
+      },
+
+      roomDeleted: () => {
+        toast.warning('Room was deleted by owner!', {
+          duration: Infinity,
+          cancel: { label: 'Dismiss', onClick: () => {} }
         })
+        navigate('/')
       }
     }
-  }, [lastMessage, setScheduleData])
+
+    Object.entries(handlers).forEach(([type, handler]) => {
+      addMessageHandler(type, handler)
+    })
+
+    return () => {
+      Object.keys(handlers).forEach(type => {
+        removeMessageHandler(type)
+      })
+    }
+  }, [
+    addMessageHandler,
+    removeMessageHandler,
+    setScheduleData,
+    setIsSettingAbsentReason,
+    navigate
+  ])
 }
 
 const excuses = [
@@ -145,10 +165,22 @@ const Join = () => {
   const [hoveredSlotUsers, setHoveredSlotUsers] = useState<null | boolean[]>(
     null
   )
+
   const [hoveringUser, setHoveringUser] = useState<null | number>(null)
   const [hasHoveredUser, setHasHoveredUser] = useState(false)
 
   const [isSettingAbsentReason, setIsSettingAbsentReason] = useState(false)
+
+  useEffect(() => {
+    const blurHandler = () => {
+      setHoveredSlotUsers(null)
+      setHoveringUser(null)
+      setHasHoveredUser(false)
+    }
+
+    window.addEventListener('blur', blurHandler)
+    return () => window.removeEventListener('blur', blurHandler)
+  }, [])
 
   useEffect(() => {
     setRoomUid(roomUid)
@@ -204,8 +236,6 @@ const Join = () => {
   }
 
   if (scheduleData === undefined) return null
-
-  console.log(`Join render ${Math.floor(new Date().getTime() / 1000) % 100}`)
 
   return (
     <main className="gap-x-8">
@@ -280,6 +310,10 @@ const AbsentButton = ({
   const userIsAbsent = scheduleData.absentReasons[0] !== null
   const indexedAbsentReasons = indexReasons(scheduleData.absentReasons)
 
+  const [customAbsentText, setCustomAbsentText] = useState<string | undefined>(
+    undefined
+  )
+
   const sendAbsentChange = (absentReason: string | number | null) => {
     setIsSettingAbsentReason(true)
 
@@ -296,28 +330,15 @@ const AbsentButton = ({
     )
   }
 
-  const sendAbsentChangeDebounced = debounce(
-    (absentReason: string | number | null) => {
-      sendAbsentChange(absentReason)
-    },
-    1000
-  )
+  useEffect(() => {
+    if (customAbsentText !== undefined) sendAbsentChange(customAbsentText)
+  }, [useDebounce(customAbsentText, 500)])
 
   return (
     <div className="flex flex-row gap-x-2 relative">
       <Button
         className={`rounded-md border border-b-[3px] border-blue-950 h-10 text-destructive hover:bg-destructive hover:text-destructive-foreground hover:border-red-800 ${userIsAbsent ? 'text-destructive-foreground bg-destructive border-b h-[38px] mt-[2px] border-red-800' : ''}`}
         onClick={() => {
-          if (!userIsAbsent) {
-            // clear schedule
-            editSchedule({
-              ...scheduleData,
-              userSchedule: [...scheduleData.userSchedule].map(day =>
-                day.map(_ => false)
-              )
-            })
-          }
-
           const newAbsentReason = userIsAbsent ? null : ''
           setScheduleData(prev => ({
             ...prev,
@@ -327,6 +348,16 @@ const AbsentButton = ({
             ]
           }))
           sendAbsentChange(newAbsentReason)
+
+          if (!userIsAbsent) {
+            // clear schedule
+            editSchedule({
+              ...scheduleData,
+              userSchedule: [...scheduleData.userSchedule].map(day =>
+                day.map(_ => false)
+              )
+            })
+          }
         }}
       >
         I can't make it.
@@ -351,6 +382,9 @@ const AbsentButton = ({
                 variant="ghost"
                 className={`flex flex-wrap text-wrap h-fit ${indexedAbsentReasons[0] === i ? 'text-foreground/95' : 'hover:text-foreground/90'}`}
                 onClick={() => {
+                  if (typeof indexedAbsentReasons[0] === 'string')
+                    setCustomAbsentText('')
+
                   // Toggle set button value
                   let newAbsentReason =
                     indexedAbsentReasons[0] !== i ? excuses[i] : ''
@@ -400,21 +434,17 @@ const AbsentButton = ({
               </div>
               <Textarea
                 className="max-h-[50vh]"
-                value={
-                  typeof indexedAbsentReasons[0] == 'string'
-                    ? indexedAbsentReasons[0]
-                    : ''
-                }
+                value={customAbsentText ?? ''}
                 onChange={e => {
-                  let value = e.currentTarget.value
+                  setCustomAbsentText(e.currentTarget.value)
+                  setIsSettingAbsentReason(true)
                   setScheduleData(prev => ({
                     ...prev,
                     absentReasons: [
-                      value,
+                      customAbsentText ?? '',
                       ...scheduleData.absentReasons.slice(1)
                     ]
                   }))
-                  sendAbsentChangeDebounced(value.trim())
                 }}
               />
             </div>

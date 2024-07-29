@@ -137,8 +137,7 @@ pub async fn handle_websocket_message(
             let user_schedule: Vec<Vec<bool>> =
                 serde_json::from_value(msg.payload["user_schedule"].clone())?;
 
-            // TODO: OR get default name!
-            let user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
+            let mut user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
 
             #[derive(Debug, Serialize, Deserialize)]
             struct EditRoomReq {
@@ -153,21 +152,50 @@ pub async fn handle_websocket_message(
             }
 
             // If user isn't in room add them
-            let users_inserted_count = sqlx::query!(
+            let user_exists: bool = match sqlx::query(
                 r#"
-                    INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
+                SELECT * FROM users_of_rooms
+                WHERE user_uid=? AND room_uid=?
+                "#,
+            )
+            .bind(&user_uid)
+            .bind(&room_uid)
+            .fetch_one(&state.db_pool)
+            .await
+            {
+                Ok(_) => true,
+                Err(sqlx::Error::RowNotFound) => false,
+                Err(error) => return Err(format!("Database error: {}", error).into()),
+            };
+
+            if !user_exists {
+                if user_name.len() == 0 {
+                    let default_name: String =
+                        (sqlx::query_as("SELECT default_name FROM users WHERE uid=?")
+                            .bind(user_uid.clone())
+                            .fetch_one(&state.db_pool)
+                            .await
+                            .unwrap_or((String::new(),)))
+                        .0;
+
+                    user_name = default_name;
+                }
+
+                let _ = sqlx::query!(
+                r#"
+                    INSERT INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
                     VALUES (?, ?, ?, ?, ?, ?);
                 "#,
                 user_uid,
                 room_uid,
-                user_name,
+                    user_name,
                 false,
                 false,
                 ""
             )
             .execute(&mut *transaction)
-            .await?
-            .rows_affected();
+            .await?;
+            }
 
             // get schedule as in DB
             let room: Room = sqlx::query_as(
@@ -225,6 +253,7 @@ pub async fn handle_websocket_message(
                     .send_json(&json!({
                     "messageType": "editSchedule",
                     "payload": {
+                        "userName": room_data.user_name,
                         "others": room_data.others_names,
                         "othersSchedule": room_data.others_schedule,
                         "absentReasons": room_data.absent_reasons
@@ -294,9 +323,21 @@ pub async fn handle_websocket_message(
                 WHERE user_uid=? AND room_uid=? 
                 "#,
             )
-            .bind(user_name_payload.name)
-            .bind(user_uid.clone())
-            .bind(room_uid.clone())
+            .bind(&user_name_payload.name)
+            .bind(&user_uid)
+            .bind(&room_uid)
+            .execute(&state.db_pool)
+            .await?;
+
+            sqlx::query(
+                r#"
+                UPDATE users
+                SET default_name=?
+                WHERE uid=?
+                "#,
+            )
+            .bind(&user_name_payload.name)
+            .bind(&user_uid)
             .execute(&state.db_pool)
             .await?;
 
@@ -306,7 +347,7 @@ pub async fn handle_websocket_message(
                 WHERE room_uid=?
                 "#,
             )
-            .bind(room_uid.clone())
+            .bind(&room_uid)
             .fetch_all(&state.db_pool)
             .await?;
 

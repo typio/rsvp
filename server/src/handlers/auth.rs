@@ -42,7 +42,7 @@ pub async fn signup(
     match sqlx::query!(
         r#"
         INSERT INTO users (uid, auth_token, default_name)
-        VALUES (?, ?, 'Jeff')
+        VALUES (?, ?, '')
         "#,
         user_uid,
         auth_token

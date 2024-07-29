@@ -120,9 +120,9 @@ pub async fn process_room_data(
     let (user_name, is_owner, is_absent, absent_reason): (String, bool, bool, String) =
         sqlx::query_as(
             r#"
-        SELECT name, is_owner, is_absent, absent_reason FROM users_of_rooms
-        WHERE room_uid=? AND user_uid=?
-        "#,
+            SELECT name, is_owner, is_absent, absent_reason FROM users_of_rooms
+            WHERE room_uid=? AND user_uid=?
+            "#,
         )
         .bind(room_uid)
         .bind(user_uid)
@@ -269,6 +269,14 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
     };
 
+    // Check if user exists to get default name
+    let default_name: String = (sqlx::query_as("SELECT default_name FROM users WHERE uid=?")
+        .bind(user_uid.clone())
+        .fetch_one(&req.state().db_pool)
+        .await
+        .unwrap_or((String::new(),)))
+    .0;
+
     let _ = match sqlx::query!(
         r#"
         INSERT INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
@@ -276,7 +284,7 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         "#,
         user_uid,
         room_uid,
-        "Jeff",
+        default_name,
         true,
         false,
         ""

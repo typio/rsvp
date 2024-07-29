@@ -77,6 +77,8 @@ const App = () => {
                           roomUid
                         }
 
+                        console.log(joinData.scheduleData.absentReasons[0])
+
                         resolve(joinData)
                       })
                     })
