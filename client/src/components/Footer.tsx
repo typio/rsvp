@@ -14,27 +14,29 @@ const Footer = () => {
   const { readyState, roomUid } = useWebSocketContext()
 
   return (
-    <footer className="text-sm text-primary font-medium text-gold grid grid-cols-3 justify-between items-end select-none">
-      <div className="flex flex-row flex-wrap gap-x-4 gap-y-2 justify-start flex-shrink ">
+    <footer
+      className={`text-sm text-primary font-medium grid ${roomUid !== null ? 'grid-cols-3' : 'grid-cols-2'} justify-between items-end select-none`}
+    >
+      <div className="flex flex-row flex-wrap gap-x-4 gap-y-4 sm:gap-y-2 justify-start flex-shrink ">
         <Link
           to="/about"
-          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
+          className="flex flex-row gap-2 basis-full sm:basis-1 items-center hover:text-primary/90 px-2"
         >
-          <FontAwesomeIcon icon={faQuestion} />
+          <FontAwesomeIcon icon={faQuestion} className="w-4 text-center" />
           <div>about</div>
         </Link>
         <a
           className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           href="mailto:tom@tominomi.com"
         >
-          <FontAwesomeIcon icon={faEnvelope} />
+          <FontAwesomeIcon icon={faEnvelope} className="w-4 text-center" />
           <div>contact</div>
         </a>
         <a
           className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           href="https://github.com/typio/rsvp"
         >
-          <FontAwesomeIcon icon={faGithubAlt} />
+          <FontAwesomeIcon icon={faGithubAlt} className="w-4 text-center" />
           <div>github</div>
         </a>
         <div className="basis-full flex">
@@ -42,15 +44,15 @@ const Footer = () => {
             className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 px-2"
             href="https://tominomi.com"
           >
-            <FontAwesomeIcon icon={faHeart} />
+            <FontAwesomeIcon icon={faHeart} className="w-4 text-center" />
             <div>by thomas huber</div>
           </a>
         </div>
       </div>
 
-      <div className="flex flex-row justify-center">
-        {roomUid !== null &&
-          (readyState === ReadyState.OPEN ? (
+      {roomUid !== null && (
+        <div className="flex flex-row justify-center">
+          {readyState === ReadyState.OPEN ? (
             <div className="flex flex-row gap-x-2 items-center">
               <svg className="w-4 h-4" viewBox="0 0 10 10">
                 <circle
@@ -78,8 +80,9 @@ const Footer = () => {
               </svg>
               disconnected
             </div>
-          ))}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-y-2 items-end">
         <span className="grid grid-flow-col w-max gap-2 items-center">

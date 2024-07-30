@@ -29,6 +29,9 @@
 @layer base {
   * {
     @apply border-border;
+
+    min-width: 0;
+    min-height: 0;
   }
 
   *:focus {

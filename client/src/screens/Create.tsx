@@ -86,7 +86,7 @@ const CreateOptions = ({
           </Button>
         </div>
         <div className="flex flex-row flex-wrap justify-around gap-4 items-center">
-          <div className="flex flex-row gap-4 items-center">
+          <div className="flex flex-col sm:flex-row gap-y-1 gap-x-4 items-center">
             <DateSelect
               mode={DaySelectMode.Dates}
               dates={scheduleData.dates}
@@ -213,6 +213,7 @@ const CreateOptions = ({
 
 const Create = () => {
   const [scheduleData, setScheduleData] = useState<ScheduleData>({
+    userName: '',
     eventName: storedCreateState?.eventName ?? 'My Event',
     dates: {
       mode: storedCreateState?.dates?.mode ?? DaySelectMode.Dates,
@@ -229,7 +230,8 @@ const Create = () => {
     slotLength: storedCreateState?.slotLength ?? 30,
     userSchedule: storedCreateState?.userSchedule ?? [],
     othersSchedule: [],
-    others: []
+    others: [],
+    absentReasons: [null]
   })
 
   useEffect(() => {
@@ -270,7 +272,6 @@ const Create = () => {
                 isCreate={true}
                 hoveringUser={null}
                 setHoveredSlotUsers={() => {}}
-                othersColors={[]}
                 editSchedule={newSchedule => setScheduleData(newSchedule)}
               />
             ) : (

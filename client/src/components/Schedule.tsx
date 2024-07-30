@@ -178,10 +178,6 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
     editSchedule(newData)
   }, [data.dates, time.slotsPerColumn])
 
-  useEffect(() => {
-    console.log('Schedule Content render')
-  }, [])
-
   return (
     <div
       className="flex flex-col p-6 bg-card shadow-xl rounded-lg select-none"
@@ -190,17 +186,13 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
         handleMouseMoveSchedule(e)
       }}
     >
-      <div className="flex flex-col pb-2 overflow-x-scroll">
-        <div
-          className="flex flex-row"
-          style={{ marginLeft: TIME_COL_WIDTH }}
-        ></div>
+      <div className="flex flex-col pb-2">
         <div className="flex flex-row ">
           <div
-            className="flex flex-col justify-between font-time text-sm text-right "
+            className="flex flex-col justify-between font-time text-sm text-right"
             style={{
               width: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
-              paddingRight: 12,
+              // paddingRight: 12,
               minHeight: (time.timeDifference / 60) * CELL_HEIGHT,
               marginTop: HEADER_HEIGHT
             }}
@@ -228,68 +220,81 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
               })}
           </div>
 
-          <div
-            className="flex flex-row flex-1 basis-1 gap-x-1 overflow-x-scroll "
-            id="slot-parent"
-          >
-            {data.dates.dates.map((date, dateIndex) => {
-              const thisDate: Date | undefined =
-                data.dates.mode === DaySelectMode.Dates
-                  ? new Date(date as string)
-                  : undefined
-              const thisDayOfWeek: number | undefined =
-                data.dates.mode === DaySelectMode.Dates
-                  ? undefined
-                  : (date as number)
+          <div className="relative">
+            <div
+              style={{
+                width: 16
+              }}
+              className="absolute z-10 h-full bg-gradient-to-r from-card via-20% via-card to-transparent"
+            />
 
-              let leftIsAdj
-              let rightIsAdj
+            <div
+              style={{
+                paddingLeft: 16
+              }}
+              className="flex flex-row flex-grow basis-0 flex-auto gap-x-1 overflow-x-scroll min-w-0"
+              id="slot-parent"
+            >
+              {data.dates.dates.map((date, dateIndex) => {
+                const thisDate: Date | undefined =
+                  data.dates.mode === DaySelectMode.Dates
+                    ? new Date(date as string)
+                    : undefined
+                const thisDayOfWeek: number | undefined =
+                  data.dates.mode === DaySelectMode.Dates
+                    ? undefined
+                    : (date as number)
 
-              if (data.dates.mode === DaySelectMode.Dates) {
-                const today = new Date(data.dates.dates[dateIndex])
+                let leftIsAdj
+                let rightIsAdj
 
-                if (dateIndex === 0) leftIsAdj = true
-                else {
-                  const leftDate = new Date(data.dates.dates[dateIndex - 1])
-                  const yesterday = addDays(today, -1)
-                  leftIsAdj = isSameDay(leftDate, yesterday)
+                if (data.dates.mode === DaySelectMode.Dates) {
+                  const today = new Date(data.dates.dates[dateIndex])
+
+                  if (dateIndex === 0) leftIsAdj = true
+                  else {
+                    const leftDate = new Date(data.dates.dates[dateIndex - 1])
+                    const yesterday = addDays(today, -1)
+                    leftIsAdj = isSameDay(leftDate, yesterday)
+                  }
+
+                  if (dateIndex === data.dates.dates.length - 1)
+                    rightIsAdj = true
+                  else {
+                    const rightDate = new Date(data.dates.dates[dateIndex + 1])
+                    const tomorrow = addDays(today, 1)
+                    rightIsAdj = isSameDay(rightDate, tomorrow)
+                  }
+                } else {
+                  leftIsAdj =
+                    dateIndex === 0
+                      ? true
+                      : date === data.dates.dates[dateIndex - 1] + 1
+                  rightIsAdj =
+                    dateIndex === data.dates.dates.length - 1
+                      ? true
+                      : date === data.dates.dates[dateIndex + 1] - 1
                 }
 
-                if (dateIndex === data.dates.dates.length - 1) rightIsAdj = true
-                else {
-                  const rightDate = new Date(data.dates.dates[dateIndex + 1])
-                  const tomorrow = addDays(today, 1)
-                  rightIsAdj = isSameDay(rightDate, tomorrow)
-                }
-              } else {
-                leftIsAdj =
-                  dateIndex === 0
-                    ? true
-                    : date === data.dates.dates[dateIndex - 1] + 1
-                rightIsAdj =
-                  dateIndex === data.dates.dates.length - 1
-                    ? true
-                    : date === data.dates.dates[dateIndex + 1] - 1
-              }
-
-              return (
-                <DayColumn
-                  key={`day-column-${dateIndex}`}
-                  isCreate={isCreate}
-                  currentSelection={currentSelection}
-                  dateIndex={dateIndex}
-                  dayUser={data?.userSchedule[dateIndex] ?? []}
-                  dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
-                  hoursPerColumn={time.hoursPerColumn}
-                  slotsPerHour={time.slotsPerHour}
-                  leftIsAdj={leftIsAdj}
-                  rightIsAdj={rightIsAdj}
-                  mode={data.dates.mode}
-                  date={thisDate}
-                  dayN={thisDayOfWeek}
-                />
-              )
-            })}
+                return (
+                  <DayColumn
+                    key={`day-column-${dateIndex}`}
+                    isCreate={isCreate}
+                    currentSelection={currentSelection}
+                    dateIndex={dateIndex}
+                    dayUser={data?.userSchedule[dateIndex] ?? []}
+                    dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
+                    hoursPerColumn={time.hoursPerColumn}
+                    slotsPerHour={time.slotsPerHour}
+                    leftIsAdj={leftIsAdj}
+                    rightIsAdj={rightIsAdj}
+                    mode={data.dates.mode}
+                    date={thisDate}
+                    dayN={thisDayOfWeek}
+                  />
+                )
+              })}
+            </div>
           </div>
         </div>
       </div>
