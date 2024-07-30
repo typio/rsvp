@@ -1,6 +1,6 @@
 import { faClone, faEraser } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { memo, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
 import { h12To24 } from '@/utils'
@@ -20,7 +20,7 @@ import { DAYS_OF_WEEK, DaySelectMode } from './DateSelect'
 import { addDays, isSameDay } from 'date-fns'
 import { toast } from 'sonner'
 
-const TIME_COL_WIDTH = 64
+const TIME_COL_WIDTH = 44
 const HEADER_HEIGHT = 64
 const CELL_HEIGHT = 20
 
@@ -191,7 +191,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
           <div
             className="flex flex-col justify-between font-time text-sm text-right"
             style={{
-              width: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
+              minWidth: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
               // paddingRight: 12,
               minHeight: (time.timeDifference / 60) * CELL_HEIGHT,
               marginTop: HEADER_HEIGHT
@@ -212,6 +212,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                     style={{
                       height: 0,
                       lineHeight: 0
+                      // width: 64
                     }}
                   >
                     {formatTime(currentHour, minutes)}
@@ -220,7 +221,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
               })}
           </div>
 
-          <div className="relative">
+          <div className="relative w-full">
             <div
               style={{
                 width: 16
@@ -232,7 +233,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
               style={{
                 paddingLeft: 16
               }}
-              className="flex flex-row flex-grow basis-0 flex-auto gap-x-1 overflow-x-scroll min-w-0"
+              className="flex flex-row flex-1 w-full flex-grow gap-x-1 overflow-x-scroll "
               id="slot-parent"
             >
               {data.dates.dates.map((date, dateIndex) => {
@@ -339,7 +340,7 @@ const DayColumn = ({
   dayN
 }: DayColumnProps) => {
   return (
-    <div className={`basis-1 flex flex-col flex-grow min-w-14 justify-center`}>
+    <div className={`flex flex-col min-w-14 w-full justify-center`}>
       <div
         className={`flex flex-col justify-center  ${!rightIsAdj && 'mr-1'} ${!leftIsAdj && 'ml-1'}`}
       >

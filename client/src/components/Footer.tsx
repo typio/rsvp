@@ -15,28 +15,28 @@ const Footer = () => {
 
   return (
     <footer
-      className={`text-sm text-primary font-medium grid ${roomUid !== null ? 'grid-cols-3' : 'grid-cols-2'} justify-between items-end select-none`}
+      className={`text-sm text-primary font-medium justify-between items-end select-none flex flex-row flex-wrap `} // grid ${roomUid !== null ? 'grid-cols-3' : 'grid-cols-2'} `}
     >
-      <div className="flex flex-row flex-wrap gap-x-4 gap-y-4 sm:gap-y-2 justify-start flex-shrink ">
+      <div className="flex flex-row flex-wrap gap-x-4 gap-y-4 sm:gap-y-2 basis-1/3">
         <Link
+          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           to="/about"
-          className="flex flex-row gap-2 basis-full sm:basis-1 items-center hover:text-primary/90 px-2"
         >
-          <FontAwesomeIcon icon={faQuestion} className="w-4 text-center" />
+          <FontAwesomeIcon icon={faQuestion} className="min-w-4 text-center" />
           <div>about</div>
         </Link>
         <a
           className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           href="mailto:tom@tominomi.com"
         >
-          <FontAwesomeIcon icon={faEnvelope} className="w-4 text-center" />
+          <FontAwesomeIcon icon={faEnvelope} className="min-w-4 text-center" />
           <div>contact</div>
         </a>
         <a
           className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
           href="https://github.com/typio/rsvp"
         >
-          <FontAwesomeIcon icon={faGithubAlt} className="w-4 text-center" />
+          <FontAwesomeIcon icon={faGithubAlt} className="min-w-4 text-center" />
           <div>github</div>
         </a>
         <div className="basis-full flex">
@@ -44,14 +44,14 @@ const Footer = () => {
             className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 px-2"
             href="https://tominomi.com"
           >
-            <FontAwesomeIcon icon={faHeart} className="w-4 text-center" />
+            <FontAwesomeIcon icon={faHeart} className="min-w-4 text-center" />
             <div>by thomas huber</div>
           </a>
         </div>
       </div>
 
       {roomUid !== null && (
-        <div className="flex flex-row justify-center">
+        <div className="basis-1/3 flex flex-row justify-center">
           {readyState === ReadyState.OPEN ? (
             <div className="flex flex-row gap-x-2 items-center">
               <svg className="w-4 h-4" viewBox="0 0 10 10">
@@ -84,7 +84,7 @@ const Footer = () => {
         </div>
       )}
 
-      <div className="flex flex-col gap-y-2 items-end">
+      <div className="flex flex-col gap-y-2 basis-1/3 items-end">
         <span className="grid grid-flow-col w-max gap-2 items-center">
           <FontAwesomeIcon icon={faCopyright} />
           <div>2024</div>
