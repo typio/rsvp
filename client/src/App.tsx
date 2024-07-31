@@ -9,7 +9,7 @@ import Footer from './components/Footer'
 import Create from './screens/Create'
 import Join, { JoinRouteData } from './screens/Join'
 import About from './screens/About'
-import { h24ToTimeRange } from './utils'
+import { h24ToTimeRange, SITE_URL } from './utils'
 import { WebSocketProvider } from './contexts/WebSocketContext'
 import { DaySelectMode } from './components/DateSelect'
 
@@ -36,13 +36,13 @@ const App = () => {
                 return
               }
 
-              fetch(`http://localhost:3632/api/auth`, {
+              fetch(`${SITE_URL}/api/auth`, {
                 method: 'POST',
                 credentials: 'include'
               })
                 .then(res => {
                   if (res.ok) {
-                    fetch(`http://localhost:3632/api/rooms/${roomUid}`, {
+                    fetch(`${SITE_URL}/api/rooms/${roomUid}`, {
                       method: 'GET',
                       credentials: 'include'
                     }).then(res => {

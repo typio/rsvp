@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import { useDebounce } from '@/utils'
+import { SITE_URL, useDebounce } from '@/utils'
 
 export type JoinRouteData = {
   scheduleData: ScheduleData
@@ -203,7 +203,7 @@ const Join = () => {
   }
 
   const deleteRoom = async () => {
-    await fetch(`http://localhost:3632/api/rooms/${roomUid}`, {
+    await fetch(`${SITE_URL}/api/rooms/${roomUid}`, {
       method: 'DELETE',
       credentials: 'include'
     })
@@ -227,7 +227,7 @@ const Join = () => {
   }
 
   const shareRoom = () => {
-    const shareURL = `https://cmon.rsvp/${roomUid}`
+    const shareURL = `${SITE_URL}/${roomUid}`
     navigator.clipboard.writeText(shareURL)
     toast.success(shareURL, {
       description: 'Copied link to clipboard.',

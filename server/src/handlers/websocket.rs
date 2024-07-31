@@ -91,7 +91,7 @@ pub async fn connect_websocket(
                         last_pong = Instant::now();
                     },
                     Some(Ok(tide_websockets::Message::Close(_))) => {
-                        println!("WebSocket closed.");
+                        // println!("WebSocket closed.");
                         break;
                     },
                     Some(Err(e)) => {

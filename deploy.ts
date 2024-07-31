@@ -12,7 +12,7 @@ import {
 import { readFileSync } from 'fs'
 
 const BUCKET = 'cmon.rsvp'
-const SOURCE_DIR = 'rsvp-web/dist/'
+const SOURCE_DIR = 'client/dist/'
 
 const s3Client = new S3Client({
   region: Bun.env.AWS_REGION,

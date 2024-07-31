@@ -25,7 +25,7 @@ async fn main() -> tide::Result<()> {
 
     let cors = CorsMiddleware::new()
         .allow_methods("GET, POST, DELETE".parse::<HeaderValue>().unwrap())
-        .allow_origin(Origin::from("http://localhost:5173"))
+        .allow_origin(Origin::from(env::var("FRONTEND_URL")?))
         .allow_credentials(true);
 
     app.with(cors);
@@ -39,7 +39,7 @@ async fn main() -> tide::Result<()> {
         .with(WebSocket::new(websocket::connect_websocket))
         .get(|_| async move { Ok("this was not a websocket request") });
 
-    app.listen("127.0.0.1:3632").await?;
+    app.listen(&env::var("BACKEND_URL")?).await?;
 
     Ok(())
 }
