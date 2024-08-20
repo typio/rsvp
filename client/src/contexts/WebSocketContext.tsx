@@ -1,3 +1,4 @@
+import { API_URL } from '@/utils'
 import React, {
   createContext,
   useCallback,
@@ -40,9 +41,7 @@ export const WebSocketProvider: React.FC<React.PropsWithChildren<{}>> = ({
   const [roomUid, setRoomUid] = useState<string | null>(null)
   const socketUrl = useMemo(
     () =>
-      roomUid
-        ? `ws://${process.env.NODE_ENV === 'development' ? 'localhost:3632' : 'cmon.rsvp'}/api/ws/${roomUid}`
-        : null,
+      roomUid ? `${API_URL.replace('http', 'ws')}/api/ws/${roomUid}` : null,
     [roomUid]
   )
   const [handlers, setHandlers] = useState<MessageHandlers>({})

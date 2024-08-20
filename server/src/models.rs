@@ -25,6 +25,7 @@ impl State {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, sqlx::FromRow)]
 pub struct UserOfRoom {
     pub room_uid: String,
@@ -35,6 +36,7 @@ pub struct UserOfRoom {
     pub absent_reason: String,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, sqlx::FromRow)]
 pub struct Room {
     pub uid: String,

@@ -69,7 +69,7 @@ const cloudfrontClient = new CloudFrontClient({
 })
 await cloudfrontClient.send(
   new CreateInvalidationCommand({
-    DistributionId: 'E3SQN0TK9Y0PMX',
+    DistributionId: 'E12X42D43CT3M5',
     InvalidationBatch: {
       Paths: {
         Quantity: 1,

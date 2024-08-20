@@ -203,8 +203,13 @@ const DatesCalendar = ({
 
   useEffect(() => {
     const handleMouseUp = () => setIsSelecting(null)
-    window.addEventListener('mouseup', handleMouseUp)
-    return () => window.removeEventListener('mouseup', handleMouseUp)
+
+    window.addEventListener('pointerup', handleMouseUp)
+    window.addEventListener('pointercancel', handleMouseUp)
+    return () => {
+      window.removeEventListener('pointerup', handleMouseUp)
+      window.removeEventListener('pointercancel', handleMouseUp)
+    }
   }, [])
 
   const getDaysInMonth = (year: number, month: number) => {
@@ -328,7 +333,7 @@ const DatesCalendar = ({
           key={day}
           className={`w-10 h-10 flex justify-center items-center select-none text-sm font-medium
           ${isSameDay(date, new Date()) ? 'text-primary' : ''} 
-          ${isSelected ? `bg-secondary ${roundedCorners} z-10` : ' bg-background text-muted-foreground hover:text-white '}
+          ${isSelected ? `bg-secondary ${roundedCorners} z-10` : ' bg-background text-muted-foreground hover:text-muted-foreground xl:hover:text-white '}
           ${day === 1 ? 'rounded-tl-md' : ''}
           ${day === daysInMonth ? 'rounded-br-md' : ''}
           ${day === firstSat ? 'rounded-tr-md' : ''}
@@ -336,11 +341,13 @@ const DatesCalendar = ({
           ${day === firstSun ? 'rounded-tl-md' : ''}
           ${day === lastSat ? 'rounded-br-md' : ''}
           cursor-pointer`}
-          onMouseDown={() => {
+          onPointerDown={e => {
+            const target = e.target as Element
+            target.releasePointerCapture(e.pointerId)
             setIsSelecting(!isSelected)
             handleDateClick(date, !isSelected)
           }}
-          onMouseEnter={() => {
+          onPointerEnter={() => {
             if (isSelecting !== null) {
               handleDateClick(date, isSelecting)
             }
@@ -360,7 +367,10 @@ const DatesCalendar = ({
   }
 
   return (
-    <div className={`flex flex-col ${showError ? 'wiggle' : ''}`}>
+    <div
+      className={`flex flex-col ${showError ? 'wiggle' : ''}`}
+      style={{ touchAction: 'none' }}
+    >
       <div className="flex flex-row justify-between items-center mb-4">
         <Button variant="ghost" onClick={() => changeMonth(-1)}>
           <FontAwesomeIcon icon={faArrowLeft} />

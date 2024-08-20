@@ -30,6 +30,7 @@ async fn main() -> tide::Result<()> {
 
     app.with(cors);
 
+    app.at("/").get(|_| async { Ok("Hello, world!") });
     app.at("/api/auth").post(auth::authenticate);
     app.at("/api/rooms").post(room::create_room);
     app.at("/api/rooms/:room_uid").get(room::get_room);

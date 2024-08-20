@@ -2,6 +2,7 @@ import {
   createBrowserRouter,
   Outlet,
   RouterProvider,
+  useNavigate,
   useRouteError
 } from 'react-router-dom'
 import Header from './components/Header'
@@ -9,9 +10,10 @@ import Footer from './components/Footer'
 import Create from './screens/Create'
 import Join, { JoinRouteData } from './screens/Join'
 import About from './screens/About'
-import { h24ToTimeRange, SITE_URL } from './utils'
+import { h24ToTimeRange, API_URL } from './utils'
 import { WebSocketProvider } from './contexts/WebSocketContext'
 import { DaySelectMode } from './components/DateSelect'
+import { Button } from './components/ui/button'
 
 const App = () => {
   const router = createBrowserRouter([
@@ -36,13 +38,13 @@ const App = () => {
                 return
               }
 
-              fetch(`${SITE_URL}/api/auth`, {
+              fetch(`${API_URL}/api/auth`, {
                 method: 'POST',
                 credentials: 'include'
               })
                 .then(res => {
                   if (res.ok) {
-                    fetch(`${SITE_URL}/api/rooms/${roomUid}`, {
+                    fetch(`${API_URL}/api/rooms/${roomUid}`, {
                       method: 'GET',
                       credentials: 'include'
                     }).then(res => {
@@ -134,11 +136,15 @@ const App = () => {
 
 const ErrorBoundary = () => {
   let rawError: any = useRouteError()
+  const navigate = useNavigate()
 
   return (
     <div className="flex flex-col gap-4 flex-grow justify-center items-center">
       <div className="text-lg">Dang an error!</div>
       <div>{rawError?.status === 404 ? '404: Page not found.' : rawError}</div>
+      <Button onClick={() => navigate('/')} className="mt-4">
+        Go home
+      </Button>
     </div>
   )
 }

@@ -3,8 +3,13 @@ import { useEffect, useState } from 'react'
 
 export const SITE_URL =
   process.env.NODE_ENV === 'development'
-    ? 'http://localhost:3632'
+    ? 'http://localhost:5173'
     : 'https://cmon.rsvp'
+
+export const API_URL =
+  process.env.NODE_ENV === 'development'
+    ? 'http://localhost:3632'
+    : 'https://api.cmon.rsvp'
 
 export const h12To24 = (hour: number, isAM: boolean) => hour + (isAM ? 0 : 12)
 export const h24To12 = (hour: number): H12Time => {

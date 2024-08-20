@@ -39,30 +39,41 @@ export const useScheduleSelection = (
       })
     }
 
-    document.addEventListener('mouseup', handleMouseUp)
-    return () => document.removeEventListener('mouseup', handleMouseUp)
+    document.addEventListener('pointerup', handleMouseUp)
+    document.addEventListener('pointercancel', handleMouseUp)
+    return () => {
+      document.removeEventListener('pointerup', handleMouseUp)
+      document.removeEventListener('pointercancel', handleMouseUp)
+    }
   }, [currentSelection])
 
   const handleMouseMoveSchedule = (event: React.MouseEvent<HTMLDivElement>) => {
-    const scheduleRect = document
-      .getElementById('slot-parent')
-      ?.getBoundingClientRect()
-    if (!scheduleRect) return
+    const scheduleEl = document.getElementById('slot-parent')
+    if (!scheduleEl) return
+
+    const scheduleRect = scheduleEl.getBoundingClientRect()
 
     const slotColumnRect = document
       .getElementById('slot-column')
       ?.getBoundingClientRect()
     if (!slotColumnRect) return
 
-    const x = event.clientX - scheduleRect.left
+    const scheduleRectLeftPad = 16
+    const scheduleWidth = scheduleEl?.scrollWidth - scheduleRectLeftPad
+
+    const x =
+      event.clientX -
+      scheduleRect.left -
+      scheduleRectLeftPad +
+      scheduleEl?.scrollLeft
     const y = event.clientY - slotColumnRect.top
 
-    if (x < 0 || y < 0 || x > scheduleRect.width || y > slotColumnRect.height) {
+    if (x < 0 || y < 0 || x > scheduleWidth || y > slotColumnRect.height) {
       setHoveredSlotUsers(null)
       return
     }
 
-    const slotWidth = scheduleRect.width / initialData.dates.dates.length
+    const slotWidth = scheduleWidth / initialData.dates.dates.length
     const slotHeight = slotColumnRect.height / slotsPerColumn
 
     const dateIndex = Math.floor(x / slotWidth)

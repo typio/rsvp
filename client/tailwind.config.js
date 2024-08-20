@@ -13,7 +13,6 @@ module.exports = {
       sans: ['Poppins', 'sans-serif'],
       time: ['Chivo Mono', 'monospace']
     },
-
     container: {},
     extend: {
       colors: {

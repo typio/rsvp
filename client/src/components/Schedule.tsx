@@ -1,9 +1,10 @@
 import { faClone, faEraser } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
-import { h12To24 } from '@/utils'
+import { API_URL, h12To24 } from '@/utils'
+import { Slider } from '@/components/ui/slider'
 import { NavigateFunction, useNavigate } from 'react-router-dom'
 import {
   checkIsDragSelected,
@@ -19,6 +20,12 @@ import { Colors } from '@/colors'
 import { DAYS_OF_WEEK, DaySelectMode } from './DateSelect'
 import { addDays, isSameDay } from 'date-fns'
 import { toast } from 'sonner'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from './ui/tooltip'
 
 const TIME_COL_WIDTH = 44
 const HEADER_HEIGHT = 64
@@ -62,7 +69,7 @@ export const shareRoom = (
     slot_length: scheduleData.slotLength,
     schedule: scheduleData.userSchedule
   })
-  fetch('http://localhost:3632/api/rooms', {
+  fetch(`${API_URL}/api/rooms`, {
     method: 'POST',
     body: req,
     credentials: 'include'
@@ -174,25 +181,63 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
         )
       )
     }
-
     editSchedule(newData)
   }, [data.dates, time.slotsPerColumn])
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const [scrollSpace, setScrollSpace] = useState(0)
+  const [sliderValue, setSliderValue] = useState(0)
+
+  useEffect(() => {
+    const calcScrollSpace = () => {
+      setScrollSpace(
+        (scrollRef.current?.scrollWidth ?? 0) -
+          (scrollRef.current?.getBoundingClientRect().width ?? 0)
+      )
+    }
+    calcScrollSpace()
+    window.addEventListener('resize', calcScrollSpace)
+    return () => window.removeEventListener('resize', calcScrollSpace)
+  }, [data.dates])
+
   return (
-    <div
-      className="flex flex-col p-6 bg-card shadow-xl rounded-lg select-none"
-      id="schedule-card"
-      onMouseMove={e => {
-        handleMouseMoveSchedule(e)
-      }}
-    >
+    <div className="flex flex-col p-4 bg-card shadow-xl rounded-lg select-none">
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <h2 className="text-muted-foreground text-center text-base mb-2 mt-2">
+              {isCreate ? 'Your Available Times' : 'Group Availabilities'}
+            </h2>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-sm indent-4 py-3 px-4 text-foreground">
+            {isCreate ? (
+              <div className="flex flex-col gap-2 ">
+                <p>
+                  You can prefill your available times here, you'll always be
+                  able to edit these later.
+                </p>
+                <p>
+                  To select times simply click & drag over the slots you are
+                  available for.
+                </p>
+              </div>
+            ) : (
+              <p>
+                To select times simply click & drag over the slots you are
+                available for.
+              </p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
       <div className="flex flex-col pb-2">
         <div className="flex flex-row ">
           <div
             className="flex flex-col justify-between font-time text-sm text-right"
             style={{
               minWidth: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
-              // paddingRight: 12,
               minHeight: (time.timeDifference / 60) * CELL_HEIGHT,
               marginTop: HEADER_HEIGHT
             }}
@@ -212,7 +257,6 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                     style={{
                       height: 0,
                       lineHeight: 0
-                      // width: 64
                     }}
                   >
                     {formatTime(currentHour, minutes)}
@@ -231,10 +275,24 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
 
             <div
               style={{
-                paddingLeft: 16
+                paddingLeft: 16,
+                touchAction: 'none',
+                scrollbarWidth: 'none'
               }}
-              className="flex flex-row flex-1 w-full flex-grow gap-x-1 overflow-x-scroll "
+              className="flex flex-row flex-1 w-full flex-grow gap-x-1 overflow-x-scroll"
               id="slot-parent"
+              ref={scrollRef}
+              onScroll={e => {
+                const scrollValue = e.currentTarget.scrollLeft
+                setSliderValue((scrollValue / scrollSpace) * 100)
+              }}
+              onPointerDown={e => {
+                const target = e.target as Element
+                target.releasePointerCapture(e.pointerId)
+              }}
+              onPointerMove={e => {
+                handleMouseMoveSchedule(e)
+              }}
             >
               {data.dates.dates.map((date, dateIndex) => {
                 const thisDate: Date | undefined =
@@ -298,6 +356,30 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
             </div>
           </div>
         </div>
+
+        {scrollSpace > 0 && (
+          <div
+            style={{
+              paddingLeft: TIME_COL_WIDTH + 16,
+              marginTop: 24,
+              marginBottom: 16
+            }}
+          >
+            <Slider
+              className="flex w-full"
+              min={0}
+              max={100}
+              step={1}
+              onValueChange={([scrollValue]) => {
+                setSliderValue(scrollValue)
+                if (scrollRef.current === null) return
+                const scrollEl: HTMLDivElement = scrollRef.current
+                scrollEl.scrollTo((scrollValue / 100) * scrollSpace, 0)
+              }}
+              value={[sliderValue]}
+            />
+          </div>
+        )}
       </div>
       {time.timeDifference > 0 ? (
         <ScheduleControls />
@@ -453,7 +535,7 @@ const Slot = ({
     <div
       className="schedule-slot flex flex-grow w-full justify-center items-center"
       style={{ height: CELL_HEIGHT }}
-      onMouseDown={() => {
+      onPointerDown={() => {
         handleMouseDownSlot(dateIndex, timeIndex, isSelected)
       }}
     >
@@ -491,7 +573,7 @@ const ScheduleControls = () => {
   const navigate = useNavigate()
 
   return (
-    <div className="flex flex-row justify-between pt-7 gap-4">
+    <div className="flex flex-row justify-between gap-4">
       <div className="flex flex-row gap-4">
         {!isCreate && false && (
           <Button

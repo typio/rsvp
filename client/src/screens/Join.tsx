@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import { SITE_URL, useDebounce } from '@/utils'
+import { API_URL, SITE_URL, useDebounce } from '@/utils'
 
 export type JoinRouteData = {
   scheduleData: ScheduleData
@@ -203,7 +203,7 @@ const Join = () => {
   }
 
   const deleteRoom = async () => {
-    await fetch(`${SITE_URL}/api/rooms/${roomUid}`, {
+    await fetch(`${API_URL}/api/rooms/${roomUid}`, {
       method: 'DELETE',
       credentials: 'include'
     })
@@ -544,7 +544,7 @@ const UserList = ({
   hoveredSlotUsers: boolean[] | null
   absentReasons: (string | null)[]
 }) => (
-  <div className="flex flex-row justify-between">
+  <div className="flex flex-row justify-between items-end gap-x-16">
     <UserItem
       user="You"
       index={0}
@@ -557,12 +557,13 @@ const UserList = ({
       absentReason={absentReasons[0]}
     />
 
-    <div className="flex flex-row gap-x-4 items-center">
+    <div className="flex flex-row gap-x-4 gap-y-4 items-center justify-end flex-wrap-reverse">
       {others?.map((user: string, i) => (
         <UserItem
           key={i}
           user={user}
           index={i + 1}
+          othersCount={160}
           hoveringUser={hoveringUser}
           setHoveringUser={setHoveringUser}
           hasHoveredUser={hasHoveredUser}
@@ -576,9 +577,22 @@ const UserList = ({
   </div>
 )
 
+const getOtherUserColor = (
+  n: number,
+  totalUsers: number,
+  firstColor: tinycolor.Instance
+) => {
+  if (totalUsers <= Colors.othersColors.length) {
+    return tinycolor(Colors.othersColors[n])
+  } else {
+    return firstColor.spin((n / totalUsers) * 360)
+  }
+}
+
 const UserItem = ({
   user,
   index,
+  othersCount,
   hoveringUser,
   setHoveringUser,
   hasHoveredUser,
@@ -589,6 +603,7 @@ const UserItem = ({
 }: {
   user: string
   index: number
+  othersCount?: number
   hoveringUser: number | null
   setHoveringUser: React.Dispatch<React.SetStateAction<number | null>>
   hasHoveredUser: boolean
@@ -599,32 +614,33 @@ const UserItem = ({
 }) => {
   const isAbsent = absentReason !== null
 
+  const color = isCurrentUser
+    ? tinycolor(Colors.userColor)
+    : getOtherUserColor(
+        index - 1,
+        othersCount ?? 1,
+        tinycolor(Colors.othersColors[0])
+      )
+  const colorBrighter = color.brighten(20).toRgbString()
+
   return (
     <TooltipProvider>
       <Tooltip delayDuration={0} open={isAbsent ? undefined : false}>
-        <TooltipTrigger>
+        <TooltipTrigger className="min-w-max ">
           <div
-            className={`flex flex-row justify-center items-center gap-x-2 duration-75 ${isCurrentUser ? 'select-none' : ''}`}
+            className={`flex flex-row justify-center items-center gap-x-2 duration-300 ${isCurrentUser ? 'select-none' : ''}`}
             style={{
               opacity:
                 (hoveringUser != null && hoveringUser != index) ||
                 (hoveredSlotUsers !== null && !hoveredSlotUsers[index])
-                  ? 0
+                  ? 0.1
                   : 1,
               // @ts-ignore
-              '--user-color': isCurrentUser
-                ? Colors.userColor
-                : Colors.othersColors[index - 1],
-              '--bright-user-color': tinycolor(
-                isCurrentUser
-                  ? Colors.userColor
-                  : Colors.othersColors[index - 1]
-              )
-                .brighten(20)
-                .toRgbString(),
+              '--user-color': color.toString(),
+              '--bright-user-color': colorBrighter,
               animation:
                 (hoveringUser === index ||
-                  (hoveredSlotUsers ?? []).length > 0) &&
+                  (hoveredSlotUsers !== null && hoveredSlotUsers[index])) &&
                 !isAbsent
                   ? 'glowAnimation 0.3s forwards, flameFlicker 1.75s ease-in-out infinite 0.3s, flamePulse 3s ease-in-out infinite 0.3s'
                   : hasHoveredUser
@@ -647,9 +663,7 @@ const UserItem = ({
               <div
                 className={`w-3 h-3 ${isCurrentUser ? 'rounded bg-secondary' : 'rounded-full'} `}
                 style={
-                  !isCurrentUser
-                    ? { backgroundColor: Colors.othersColors[index - 1] }
-                    : {}
+                  !isCurrentUser ? { backgroundColor: color.toString() } : {}
                 }
               />
             )}

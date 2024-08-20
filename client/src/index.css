@@ -26,6 +26,7 @@
     --radius: 0.75rem;
   }
 }
+
 @layer base {
   * {
     @apply border-border;
@@ -160,4 +161,8 @@
       0px 0px 45px var(--user-color),
       0px 0px 60px var(--bright-user-color);
   }
+}
+
+.without-ring {
+  @apply focus:ring-0 focus:ring-offset-0;
 }

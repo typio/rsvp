@@ -15,7 +15,7 @@ const Footer = () => {
 
   return (
     <footer
-      className={`text-sm text-primary font-medium justify-between items-end select-none flex flex-row flex-wrap `} // grid ${roomUid !== null ? 'grid-cols-3' : 'grid-cols-2'} `}
+      className={`text-sm text-primary font-medium justify-between items-end select-none flex flex-row flex-wrap `}
     >
       <div className="flex flex-row flex-wrap gap-x-4 gap-y-4 sm:gap-y-2 basis-1/3">
         <Link
@@ -39,15 +39,13 @@ const Footer = () => {
           <FontAwesomeIcon icon={faGithubAlt} className="min-w-4 text-center" />
           <div>github</div>
         </a>
-        <div className="basis-full flex">
-          <a
-            className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 px-2"
-            href="https://tominomi.com"
-          >
-            <FontAwesomeIcon icon={faHeart} className="min-w-4 text-center" />
-            <div>by thomas huber</div>
-          </a>
-        </div>
+        <a
+          className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 px-2"
+          href="https://tominomi.com"
+        >
+          <FontAwesomeIcon icon={faHeart} className="min-w-4 text-center" />
+          <div>thomas</div>
+        </a>
       </div>
 
       {roomUid !== null && (

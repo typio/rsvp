@@ -21,3 +21,6 @@ futures = "0.3"
 [dependencies.uuid]
 version = "1.8.0"
 features = ["v4", "fast-rng", "macro-diagnostics"]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-unknown-linux-gnu-gcc"
