@@ -1,5 +1,7 @@
+import { Colors } from '@/colors'
 import { H12Time, H24TimeRange } from '@/types'
 import { useEffect, useState } from 'react'
+import tinycolor from 'tinycolor2'
 
 export const SITE_URL =
   process.env.NODE_ENV === 'development'
@@ -48,5 +50,17 @@ export const debounce = (func: (...args: any[]) => any, wait: number) => {
     }
     clearTimeout(timeout)
     timeout = setTimeout(later, wait)
+  }
+}
+
+export const getOtherUserColor = (
+  n: number,
+  totalUsers: number,
+  firstColor: tinycolor.Instance
+) => {
+  if (totalUsers <= Colors.othersColors.length) {
+    return tinycolor(Colors.othersColors[n])
+  } else {
+    return firstColor.spin((n / totalUsers) * 360)
   }
 }

@@ -1,5 +1,6 @@
 import { Colors } from '@/colors'
 import { Selection } from '@/components/Schedule'
+import { getOtherUserColor } from '@/utils'
 import tinycolor from 'tinycolor2'
 
 export type SlotColorResult = {
@@ -55,7 +56,7 @@ export const useColorCalculation = (
     isDragSelected: boolean,
     othersValue: number[]
   ): { res: SlotColorResult; showOthers: boolean } => {
-    let slotColor = null
+    let slotColor: tinycolor.Instance | null = null
     let alpha = 1
 
     const { userColorString, allColorString } = slotColors
@@ -72,9 +73,16 @@ export const useColorCalculation = (
 
     if (hoveringUser === 0 && isSelected)
       slotColor = tinycolor('hsl ' + userColorString)
-    else if (cellSelectedByHoveringOtherUser && hoveringUser >= 1)
-      slotColor = tinycolor(Colors.othersColors[hoveringUser - 1])
-    else if (cellSelectedByAll) slotColor = tinycolor('hsl ' + allColorString)
+    else if (cellSelectedByHoveringOtherUser && hoveringUser >= 1) {
+      slotColor =
+        others.length <= Colors.othersColors.length
+          ? tinycolor(Colors.othersColors[hoveringUser - 1])
+          : getOtherUserColor(
+              hoveringUser,
+              others.length,
+              tinycolor(Colors.othersColors[0])
+            )
+    } else if (cellSelectedByAll) slotColor = tinycolor('hsl ' + allColorString)
     else if (isSelected || (isDragSelected && currentSelection.additive))
       slotColor = tinycolor('hsl ' + userColorString)
 

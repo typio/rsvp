@@ -27,7 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip'
-import { API_URL, SITE_URL, useDebounce } from '@/utils'
+import { API_URL, SITE_URL, getOtherUserColor, useDebounce } from '@/utils'
 
 export type JoinRouteData = {
   scheduleData: ScheduleData
@@ -573,7 +573,7 @@ const UserList = ({
           key={i}
           user={user}
           index={i + 1}
-          othersCount={160}
+          othersCount={others.length}
           hoveringUser={hoveringUser}
           setHoveringUser={setHoveringUser}
           hasHoveredUser={hasHoveredUser}
@@ -586,18 +586,6 @@ const UserList = ({
     </div>
   </div>
 )
-
-const getOtherUserColor = (
-  n: number,
-  totalUsers: number,
-  firstColor: tinycolor.Instance
-) => {
-  if (totalUsers <= Colors.othersColors.length) {
-    return tinycolor(Colors.othersColors[n])
-  } else {
-    return firstColor.spin((n / totalUsers) * 360)
-  }
-}
 
 const UserItem = ({
   user,
