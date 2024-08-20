@@ -69,6 +69,7 @@ export const shareRoom = (
     slot_length: scheduleData.slotLength,
     schedule: scheduleData.userSchedule
   })
+
   fetch(`${API_URL}/api/rooms`, {
     method: 'POST',
     body: req,

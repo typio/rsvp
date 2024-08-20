@@ -49,7 +49,9 @@ const App = () => {
                       credentials: 'include'
                     }).then(res => {
                       if (res.status === 404)
-                        reject(`This room does not exist.`)
+                        reject(
+                          `This room does not exist. It was probably deleted by the owner.`
+                        )
                       if (res.status !== 200)
                         reject(`${res.status}: ${res.statusText}`)
                       res.json().then(resJSON => {
@@ -78,8 +80,6 @@ const App = () => {
                           isOwner,
                           roomUid
                         }
-
-                        console.log(joinData.scheduleData.absentReasons[0])
 
                         resolve(joinData)
                       })
@@ -141,7 +141,9 @@ const ErrorBoundary = () => {
   return (
     <div className="flex flex-col gap-4 flex-grow justify-center items-center">
       <div className="text-lg">Dang an error!</div>
-      <div>{rawError?.status === 404 ? '404: Page not found.' : rawError}</div>
+      <div className="max-w-sm text-center">
+        {rawError?.status === 404 ? '404: Page not found.' : rawError}
+      </div>
       <Button onClick={() => navigate('/')} className="mt-4">
         Go home
       </Button>

@@ -333,7 +333,7 @@ const DatesCalendar = ({
           key={day}
           className={`w-10 h-10 flex justify-center items-center select-none text-sm font-medium
           ${isSameDay(date, new Date()) ? 'text-primary' : ''} 
-          ${isSelected ? `bg-secondary ${roundedCorners} z-10` : ' bg-background text-muted-foreground hover:text-muted-foreground xl:hover:text-white '}
+          ${isSelected ? `bg-secondary ${roundedCorners} z-10` : ' bg-background text-muted-foreground active:text-muted-foreground xl:active:text-white '}
           ${day === 1 ? 'rounded-tl-md' : ''}
           ${day === daysInMonth ? 'rounded-br-md' : ''}
           ${day === firstSat ? 'rounded-tr-md' : ''}

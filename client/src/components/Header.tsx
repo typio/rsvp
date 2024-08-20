@@ -6,7 +6,7 @@ const Header = () => (
   <header className="flex flex-row justify-center sm:justify-start mt-4 sm:mt-2">
     <Link
       to="/"
-      className="flex flex-col gap-y-1.5 justify-center text-primary hover:text-primary/80 ring-offset-8"
+      className="flex flex-col gap-y-1.5 justify-center text-primary active:text-primary/80 ring-offset-8"
     >
       <div className="flex flex-row items-center ">
         <FontAwesomeIcon icon={faCalendarCheck} size="2xl" />

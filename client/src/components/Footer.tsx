@@ -19,28 +19,28 @@ const Footer = () => {
     >
       <div className="flex flex-row flex-wrap gap-x-4 gap-y-4 sm:gap-y-2 basis-1/3">
         <Link
-          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
+          className="flex flex-row gap-2 items-center active:text-primary/90 px-2"
           to="/about"
         >
           <FontAwesomeIcon icon={faQuestion} className="min-w-4 text-center" />
           <div>about</div>
         </Link>
         <a
-          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
+          className="flex flex-row gap-2 items-center active:text-primary/90 px-2"
           href="mailto:tom@tominomi.com"
         >
           <FontAwesomeIcon icon={faEnvelope} className="min-w-4 text-center" />
           <div>contact</div>
         </a>
         <a
-          className="flex flex-row gap-2 items-center hover:text-primary/90 px-2"
+          className="flex flex-row gap-2 items-center active:text-primary/90 px-2"
           href="https://github.com/typio/rsvp"
         >
           <FontAwesomeIcon icon={faGithubAlt} className="min-w-4 text-center" />
           <div>github</div>
         </a>
         <a
-          className="flex flex-row col-span-2 gap-2 items-center hover:text-primary/90 px-2"
+          className="flex flex-row col-span-2 gap-2 items-center active:text-primary/90 px-2"
           href="https://tominomi.com"
         >
           <FontAwesomeIcon icon={faHeart} className="min-w-4 text-center" />

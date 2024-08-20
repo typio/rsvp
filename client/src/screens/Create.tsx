@@ -79,7 +79,7 @@ const CreateOptions = ({
           </div>
           <Button
             onClick={() => shareRoom(scheduleData, navigate)}
-            className="flex flex-row gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
+            className="flex flex-row gap-x-2 items-center bg-muted text-primary active:bg-primary active:text-card"
           >
             <FontAwesomeIcon icon={faSquareUpRight} />
             Share

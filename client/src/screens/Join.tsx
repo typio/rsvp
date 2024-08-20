@@ -337,7 +337,7 @@ const AbsentButton = ({
   return (
     <div className="flex flex-row gap-x-2 relative">
       <Button
-        className={`rounded-md border border-b-[3px] border-blue-950 h-10 text-destructive hover:bg-destructive hover:text-destructive-foreground hover:border-red-800 ${userIsAbsent ? 'text-destructive-foreground bg-destructive border-b h-[38px] mt-[2px] border-red-800' : ''}`}
+        className={`rounded-md border border-b-[3px] border-blue-950 h-10 text-destructive active:bg-destructive active:text-destructive-foreground active:border-red-800 ${userIsAbsent ? 'text-destructive-foreground bg-destructive border-b h-[38px] mt-[2px] border-red-800' : ''}`}
         onClick={() => {
           const newAbsentReason = userIsAbsent ? null : ''
           setScheduleData(prev => ({
@@ -365,7 +365,7 @@ const AbsentButton = ({
       <Popover>
         <PopoverTrigger asChild>
           <Button
-            className={`bg-background duration-200 mt-[2px] h-[38px] transition-all absolute left-[100%] hover:bg-background hover:text-primary hover:ring-2 hover:ring-offset-0 hover:ring-primary disabled:opacity-0 ${userIsAbsent ? 'opacity-100 ml-3' : 'opacity-0 ml-0'}`}
+            className={`bg-background duration-200 mt-[2px] h-[38px] transition-all absolute left-[100%] active:bg-background active:text-primary active:ring-2 active:ring-offset-0 active:ring-primary disabled:opacity-0 ${userIsAbsent ? 'opacity-100 ml-3' : 'opacity-0 ml-0'}`}
             disabled={!userIsAbsent}
           >
             <FontAwesomeIcon icon={faQuestion} />
@@ -380,7 +380,7 @@ const AbsentButton = ({
               <Button
                 key={i}
                 variant="ghost"
-                className={`flex flex-wrap text-wrap h-fit ${indexedAbsentReasons[0] === i ? 'text-foreground/95' : 'hover:text-foreground/90'}`}
+                className={`flex flex-wrap text-wrap h-fit ${indexedAbsentReasons[0] === i ? 'text-foreground/95' : 'active:text-foreground/90'}`}
                 onClick={() => {
                   if (typeof indexedAbsentReasons[0] === 'string')
                     setCustomAbsentText('')
@@ -468,62 +468,72 @@ const EventDetails = ({
   sendMessage: (arg0: string) => void
   shareRoom: () => void
 }) => (
-  <div className="flex flex-col gap-y-2 mb-4 bg-card shadow-xl p-4 rounded-md ">
-    <div className="flex flex-row gap-x-4 items-end">
-      {isOwner ? (
-        <div className="flex flex-col gap-y-1 flex-1">
-          <label className="text-sm font-medium text-muted-foreground">
-            Event name
-          </label>
-          <Input
-            value={scheduleData?.eventName}
-            onChange={e => {
-              const value = e.target.value
-              setScheduleData(prev => ({ ...prev, eventName: value }))
-              sendMessage(
-                JSON.stringify({
-                  message_type: 'editEventName',
-                  payload: {
-                    name: value
-                  }
-                })
-              )
-            }}
-          />
-        </div>
-      ) : (
-        <div className="mb-2 text-lg">{scheduleData?.eventName}</div>
-      )}
+  <div className="flex flex-row gap-x-2 mb-4 bg-card shadow-xl p-4 rounded-md">
+    <div className="flex flex-1 flex-col gap-y-2 ">
+      <div className="flex flex-row gap-x-4 items-end">
+        {isOwner ? (
+          <div className="flex flex-col gap-y-1 flex-1">
+            <label className="text-sm font-medium text-muted-foreground">
+              Event name
+            </label>
+            <Input
+              value={scheduleData?.eventName}
+              onChange={e => {
+                const value = e.target.value
+                setScheduleData(prev => ({ ...prev, eventName: value }))
+                sendMessage(
+                  JSON.stringify({
+                    message_type: 'editEventName',
+                    payload: {
+                      name: value
+                    }
+                  })
+                )
+              }}
+            />
+          </div>
+        ) : (
+          <div className="mb-2 text-lg">{scheduleData?.eventName}</div>
+        )}
+      </div>
 
-      <Button
-        onClick={shareRoom}
-        className="flex flex-row ml-auto gap-x-2 items-center bg-muted text-primary hover:bg-primary hover:text-card"
-      >
+      <div className="flex flex-col gap-y-1">
+        <label className="text-sm font-medium text-muted-foreground">
+          Your name
+        </label>
+        <Input
+          value={scheduleData.userName}
+          onChange={e => {
+            const value = e.target.value
+            setScheduleData(prev => ({ ...prev, userName: value }))
+            sendMessage(
+              JSON.stringify({
+                message_type: 'editUserName',
+                payload: {
+                  name: value
+                }
+              })
+            )
+          }}
+        />
+      </div>
+    </div>
+
+    <Button
+      onClick={shareRoom}
+      className={`group ${isOwner ? 'mt-6' : ''} flex flex-col h-28 ml-auto justify-around rounded-lg text-primary bg-background active:bg-background shadow-md active:shadow-none border-2 border-secondary/45 active:border-primary/90`}
+    >
+      <div className="flex flex-row h-10 px-4 py-2 rounded-md gap-x-2 items-center bg-muted text-primary group-active:bg-primary group-active:text-card">
         <FontAwesomeIcon icon={faSquareUpRight} />
         Share
-      </Button>
-    </div>
-
-    <div className="flex flex-col gap-y-1">
-      <label className="text-sm font-medium text-muted-foreground">
-        Your name
-      </label>
-      <Input
-        value={scheduleData.userName}
-        onChange={e => {
-          const value = e.target.value
-          setScheduleData(prev => ({ ...prev, userName: value }))
-          sendMessage(
-            JSON.stringify({
-              message_type: 'editUserName',
-              payload: {
-                name: value
-              }
-            })
-          )
-        }}
-      />
-    </div>
+      </div>
+      <div className="text-muted-foreground">
+        Room ID:
+        <span className="ml-2 text-foreground">
+          {(window.location.toString().match(/.*\/(.*)/) ?? ['']).at(-1)}
+        </span>
+      </div>
+    </Button>
   </div>
 )
 
