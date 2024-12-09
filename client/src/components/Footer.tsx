@@ -27,7 +27,7 @@ const Footer = () => {
         </Link>
         <a
           className="flex flex-row gap-2 items-center active:text-primary/90 px-2"
-          href="mailto:tom@tominomi.com"
+          href="mailto:tomsemail2100@gmail.com"
         >
           <FontAwesomeIcon icon={faEnvelope} className="min-w-4 text-center" />
           <div>contact</div>
@@ -41,7 +41,7 @@ const Footer = () => {
         </a>
         <a
           className="flex flex-row col-span-2 gap-2 items-center active:text-primary/90 px-2"
-          href="https://tominomi.com"
+          href="https://thomasodysseus.com"
         >
           <FontAwesomeIcon icon={faHeart} className="min-w-4 text-center" />
           <div>thomas</div>
