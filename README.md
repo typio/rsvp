@@ -1,5 +1,5 @@
 # rsvp
-> Hey! C'mon and RSVP for our party bitch!!
+> Hey! C'mon and RSVP for our party!!
 
 Implemented with a React frontend and a Rust/SQL backend.
 
