@@ -2,6 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Toaster } from '@/components/ui/sonner'
 
+import '@fontsource-variable/lexend'
+
 import App from './App.tsx'
 import './index.css'
 

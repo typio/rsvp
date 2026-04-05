@@ -47,7 +47,8 @@ pub struct Room {
     pub time_min: u8,
     pub time_max: u8,
     pub slot_length: u8,
-    pub schedule: String, // TODO: Change from full user_uids to indexes into users_of_room maybe?
+    pub schedule: String,
+    pub participants: String,
     pub expires_at: time_new::OffsetDateTime,
 }
 

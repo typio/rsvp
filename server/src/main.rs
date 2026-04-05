@@ -21,6 +21,23 @@ async fn main() -> tide::Result<()> {
     dotenv().ok();
 
     let pool = MySqlPool::connect(&env::var("DATABASE_URL")?).await?;
+
+    // Periodic cleanup of expired rooms
+    let cleanup_pool = pool.clone();
+    async_std::task::spawn(async move {
+        loop {
+            async_std::task::sleep(std::time::Duration::from_secs(3600)).await;
+            if let Err(e) = sqlx::query("DELETE FROM users_of_rooms WHERE room_uid IN (SELECT uid FROM rooms WHERE expires_at < NOW())")
+                .execute(&cleanup_pool).await {
+                eprintln!("Room cleanup error (users_of_rooms): {}", e);
+            }
+            if let Err(e) = sqlx::query("DELETE FROM rooms WHERE expires_at < NOW()")
+                .execute(&cleanup_pool).await {
+                eprintln!("Room cleanup error (rooms): {}", e);
+            }
+        }
+    });
+
     let mut app = tide::with_state(State::new(pool));
 
     let cors = CorsMiddleware::new()
@@ -35,6 +52,7 @@ async fn main() -> tide::Result<()> {
     app.at("/api/rooms").post(room::create_room);
     app.at("/api/rooms/:room_uid").get(room::get_room);
     app.at("/api/rooms/:room_uid").delete(room::delete_room);
+    app.at("/api/og/:room_uid").get(room::og_page);
 
     app.at("/api/ws/:room_uid")
         .with(WebSocket::new(websocket::connect_websocket))

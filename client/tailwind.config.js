@@ -10,8 +10,7 @@ module.exports = {
   prefix: '',
   theme: {
     fontFamily: {
-      sans: ['Poppins', 'sans-serif'],
-      time: ['Chivo Mono', 'monospace']
+      sans: ['Lexend Variable', 'sans-serif'],
     },
     container: {},
     extend: {

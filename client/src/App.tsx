@@ -1,6 +1,7 @@
 import {
   createBrowserRouter,
   Outlet,
+  redirect,
   RouterProvider,
   useNavigate,
   useRouteError
@@ -28,8 +29,12 @@ const App = () => {
           path: '/:room_uid',
           element: <Join />,
 
-          loader: ({ params }): Promise<JoinRouteData> => {
+          loader: ({ params }): Promise<JoinRouteData> | Response => {
             const roomUid = params.room_uid
+
+            if (roomUid && roomUid !== roomUid.toUpperCase()) {
+              return redirect(`/${roomUid.toUpperCase()}`)
+            }
 
             // NOTE: Slight issue where if Create successfully creates a room but this fails to load it, then that room is essentially lost and wasting resources
             return new Promise((resolve, reject) => {
@@ -138,14 +143,23 @@ const ErrorBoundary = () => {
   let rawError: any = useRouteError()
   const navigate = useNavigate()
 
+  const is404 = rawError?.status === 404
+  const isRoomGone = typeof rawError === 'string' && rawError.includes('does not exist')
+
   return (
-    <div className="flex flex-col gap-4 flex-grow justify-center items-center">
-      <div className="text-lg">Dang an error!</div>
-      <div className="max-w-sm text-center">
-        {rawError?.status === 404 ? '404: Page not found.' : rawError}
-      </div>
-      <Button onClick={() => navigate('/')} className="mt-4">
-        Go home
+    <div className="flex flex-col gap-6 flex-grow justify-center items-center max-w-sm mx-auto text-center">
+      <span className="text-5xl font-bold text-primary">
+        {is404 ? '404' : isRoomGone ? 'Gone' : 'Oops'}
+      </span>
+      <p className="text-muted-foreground">
+        {is404
+          ? "This page doesn't exist."
+          : isRoomGone
+            ? 'This room was deleted or expired.'
+            : rawError?.toString?.() || 'Something went wrong.'}
+      </p>
+      <Button onClick={() => navigate('/')} className="mt-2">
+        Create a new room
       </Button>
     </div>
   )

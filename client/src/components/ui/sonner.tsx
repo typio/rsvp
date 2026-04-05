@@ -12,15 +12,15 @@ type ToasterProps = React.ComponentProps<typeof Sonner>
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
+      theme="dark"
       className="bg-card"
       toastOptions={{
         classNames: {
           toast:
-            'toast bg-card/80 text-foreground border-border shadow-lg pl-4',
+            'toast bg-card text-foreground border border-white/10 shadow-2xl shadow-black/50 pl-4',
           description: 'text-white opacity-35',
-          actionButton:
-            'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground',
-          cancelButton: 'group-[.toast]:bg-secondary group-[.toast]:text-white',
+          actionButton: 'toast-btn',
+          cancelButton: 'toast-btn',
           success: 'text-primary',
           error: ''
         }

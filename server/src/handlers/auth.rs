@@ -39,6 +39,10 @@ pub async fn signup(
     let user_uid = Uuid::new_v4().to_string();
     let auth_token = generate_auth_token();
 
+    let is_secure = std::env::var("FRONTEND_URL")
+        .map(|url| url.starts_with("https"))
+        .unwrap_or(false);
+
     match sqlx::query!(
         r#"
         INSERT INTO users (uid, auth_token, default_name)
@@ -55,6 +59,7 @@ pub async fn signup(
                 user_uid,
                 Cookie::build("auth_token", auth_token)
                     .http_only(true)
+                    .secure(is_secure)
                     .path("/")
                     .expires(OffsetDateTime::now_utc() + Duration::days(400))
                     .same_site(tide::http::cookies::SameSite::Strict)

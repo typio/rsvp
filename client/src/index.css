@@ -45,7 +45,6 @@
 
   *:focus-visible {
     outline: none;
-    @apply ring-2 ring-offset-4 ring-offset-background rounded-md ring-primary;
   }
 
   body {
@@ -166,3 +165,10 @@
 .without-ring {
   @apply focus:ring-0 focus:ring-offset-0;
 }
+
+[data-sonner-toast] [data-button].toast-btn {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+  padding: 0.75rem 1rem !important;
+}
+

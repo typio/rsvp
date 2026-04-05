@@ -1,11 +1,12 @@
-import { faClone, faEraser } from '@fortawesome/free-solid-svg-icons'
+import { faEraser } from '@fortawesome/free-solid-svg-icons'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from './ui/button'
 import { ScheduleData } from '@/types'
-import { API_URL, h12To24 } from '@/utils'
+import { API_URL, SITE_URL, getOtherUserColor, h12To24 } from '@/utils'
+import tinycolor from 'tinycolor2'
 import { Slider } from '@/components/ui/slider'
-import { NavigateFunction, useNavigate } from 'react-router-dom'
+import { NavigateFunction } from 'react-router-dom'
 import {
   checkIsDragSelected,
   convertTo24Hour,
@@ -20,16 +21,11 @@ import { Colors } from '@/colors'
 import { DAYS_OF_WEEK, DaySelectMode } from './DateSelect'
 import { addDays, isSameDay } from 'date-fns'
 import { toast } from 'sonner'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from './ui/tooltip'
 
 const TIME_COL_WIDTH = 44
 const HEADER_HEIGHT = 64
-const CELL_HEIGHT = 20
+const BASE_CELL_HEIGHT = 20
+const CELL_HEIGHT_FOR_SLOT = (slotLength: number) => Math.max(BASE_CELL_HEIGHT, BASE_CELL_HEIGHT * (slotLength / 30))
 
 type SelectionPoint = {
   dateIndex: number
@@ -50,6 +46,17 @@ export const shareRoom = (
   scheduleData: ScheduleData,
   navigate: NavigateFunction
 ): boolean => {
+  if (scheduleData.dates.dates.length === 0) {
+    toast.error("You haven't picked any days!", {
+      description: "How would that work?",
+      action: {
+        label: 'Good point.',
+        onClick: () => { }
+      }
+    })
+    return false
+  }
+
   let req = JSON.stringify({
     event_name: scheduleData.eventName,
     schedule_type: scheduleData.dates.mode,
@@ -78,8 +85,13 @@ export const shareRoom = (
     .then(res => {
       if (res.status === 200) {
         res.json().then(resJSON => {
+          const shareURL = `${SITE_URL}/${resJSON.room_uid}`
+          navigator.clipboard.writeText(shareURL)
+          toast.success(shareURL, {
+            description: 'Link copied to clipboard.',
+            position: 'top-right'
+          })
           navigate(`/${resJSON.room_uid}`)
-          return true
         })
       } else {
         throw new Error(`Error ${res.status}: ${res.statusText}`)
@@ -90,7 +102,7 @@ export const shareRoom = (
         description: e.message,
         cancel: {
           label: 'Dismiss',
-          onClick: () => {}
+          onClick: () => { }
         }
       })
     )
@@ -129,13 +141,11 @@ const Schedule = ({
   )
 
   const timeDifference =
-    toHour24 === 0 && fromHour24 === 0
+    fromHour24 === toHour24
       ? 24 * 60
-      : fromHour24 <= toHour24
+      : fromHour24 < toHour24
         ? (toHour24 - fromHour24) * 60
-        : toHour24 === 0
-          ? (toHour24 + 24 - fromHour24) * 60
-          : 0
+        : (24 - fromHour24 + toHour24) * 60
 
   const hoursPerColumn = timeDifference / 60
   const slotsPerHour = 60 / data.slotLength
@@ -194,7 +204,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
     const calcScrollSpace = () => {
       setScrollSpace(
         (scrollRef.current?.scrollWidth ?? 0) -
-          (scrollRef.current?.getBoundingClientRect().width ?? 0)
+        (scrollRef.current?.getBoundingClientRect().width ?? 0)
       )
     }
     calcScrollSpace()
@@ -204,47 +214,24 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
 
   return (
     <div className="flex flex-col p-4 bg-card shadow-xl rounded-lg select-none">
-      <TooltipProvider delayDuration={0}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <h2 className="text-muted-foreground text-center text-base mb-2 mt-2">
-              {isCreate ? 'Your Available Times' : 'Group Availabilities'}
-            </h2>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-sm indent-4 py-3 px-4 text-foreground">
-            {isCreate ? (
-              <div className="flex flex-col gap-2 ">
-                <p>
-                  You can prefill your available times here, you'll always be
-                  able to edit these later.
-                </p>
-                <p>
-                  To select times simply click & drag over the slots you are
-                  available for.
-                </p>
-              </div>
-            ) : (
-              <p>
-                To select times simply click & drag over the slots you are
-                available for.
-              </p>
-            )}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <h2 className="text-foreground text-center text-base my-2">
+        {isCreate ? 'Your Available Times' : 'Group Availabilities'}
+      </h2>
 
       <div className="flex flex-col pb-2">
         <div className="flex flex-row ">
           <div
-            className="flex flex-col justify-between font-time text-sm text-right"
+            className="flex flex-col justify-between font-sans text-sm text-right"
             style={{
               minWidth: time.timeDifference > 0 ? TIME_COL_WIDTH : 0,
-              minHeight: (time.timeDifference / 60) * CELL_HEIGHT,
+              minHeight: (time.timeDifference / 60) * CELL_HEIGHT_FOR_SLOT(data.slotLength),
               marginTop: HEADER_HEIGHT
             }}
           >
-            {time.timeDifference > 0 &&
-              Array.from({
+            {time.timeDifference > 0 && (() => {
+              const isOvernight = time.fromHour24 > time.toHour24
+              const midnightHourIndex = isOvernight ? 24 - time.fromHour24 : -1
+              return Array.from({
                 length: time.timeDifference / 60 + 1
               }).map((_, i) => {
                 const totalMinutes = i * 60
@@ -253,17 +240,17 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                 const currentHour = (time.fromHour24 + hours) % 24
 
                 return (
-                  <div
-                    key={`timeLabel-${i}`}
-                    style={{
-                      height: 0,
-                      lineHeight: 0
-                    }}
-                  >
-                    {formatTime(currentHour, minutes)}
+                  <div key={`timeLabel-${i}`}>
+                    {isOvernight && i === midnightHourIndex && (
+                      <div className="h-4" />
+                    )}
+                    <div style={{ height: 0, lineHeight: 0 }}>
+                      {formatTime(currentHour, minutes)}
+                    </div>
                   </div>
                 )
-              })}
+              })
+            })()}
           </div>
 
           <div className="relative w-full">
@@ -344,6 +331,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                     dateIndex={dateIndex}
                     dayUser={data?.userSchedule[dateIndex] ?? []}
                     dayOthers={data.othersSchedule?.at(dateIndex) ?? []}
+                    userCount={data.others.length + 1}
                     hoursPerColumn={time.hoursPerColumn}
                     slotsPerHour={time.slotsPerHour}
                     leftIsAdj={leftIsAdj}
@@ -351,6 +339,9 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                     mode={data.dates.mode}
                     date={thisDate}
                     dayN={thisDayOfWeek}
+                    slotLength={data.slotLength}
+                    fromHour24={time.fromHour24}
+                    toHour24={time.toHour24}
                   />
                 )
               })}
@@ -399,6 +390,7 @@ type DayColumnProps = {
   dateIndex: number
   dayUser: boolean[]
   dayOthers: number[][]
+  userCount: number
   hoursPerColumn: number
   slotsPerHour: number
   leftIsAdj: boolean
@@ -406,6 +398,9 @@ type DayColumnProps = {
   mode: DaySelectMode
   date: Date | undefined
   dayN: number | undefined
+  slotLength: number
+  fromHour24: number
+  toHour24: number
 }
 
 const DayColumn = ({
@@ -414,16 +409,22 @@ const DayColumn = ({
   dateIndex,
   dayUser,
   dayOthers,
+  userCount,
   hoursPerColumn,
   slotsPerHour,
   leftIsAdj,
   rightIsAdj,
   mode,
   date,
-  dayN
+  dayN,
+  slotLength,
+  fromHour24,
+  toHour24
 }: DayColumnProps) => {
+  const isOvernight = fromHour24 > toHour24
+  const midnightSlotIndex = isOvernight ? (24 - fromHour24) * slotsPerHour : -1
   return (
-    <div className={`flex flex-col min-w-14 w-full justify-center`}>
+    <div className={`flex flex-col min-w-14 w-full`}>
       <div
         className={`flex flex-col justify-center  ${!rightIsAdj && 'mr-1'} ${!leftIsAdj && 'ml-1'}`}
       >
@@ -433,42 +434,54 @@ const DayColumn = ({
         >
           <ColumnHeader mode={mode} date={date} dayN={dayN} />
         </div>
-        <div
-          id="slot-column"
-          className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5 cursor-pointer "
-        >
-          {Array.from({ length: hoursPerColumn })?.map((_, i) => {
+        {(() => {
+          const renderHourGroup = (hourIndex: number) => {
+            const startIdx = hourIndex * slotsPerHour
             return (
-              <div className="flex flex-col" key={i}>
-                {Array.from({ length: slotsPerHour })?.map((_, j) => {
-                  let idx = slotsPerHour * i + j
-                  if (idx >= dayUser.length) return
-
-                  const timeIndex = idx
-                  const isSelected = dayUser[idx]
-
-                  const isDragSelected = checkIsDragSelected(
-                    currentSelection,
-                    dateIndex,
-                    timeIndex
-                  )
-
+              <div className="flex flex-col" key={hourIndex}>
+                {Array.from({ length: slotsPerHour }).map((_, j) => {
+                  const idx = startIdx + j
+                  if (idx >= dayUser.length) return null
                   return (
                     <Slot
-                      key={timeIndex}
+                      key={idx}
                       isCreate={isCreate}
                       dateIndex={dateIndex}
-                      timeIndex={timeIndex}
-                      isSelected={isSelected}
-                      isDragSelected={isDragSelected}
-                      othersValue={dayOthers?.at(timeIndex) ?? []}
+                      timeIndex={idx}
+                      isSelected={dayUser[idx]}
+                      isDragSelected={checkIsDragSelected(currentSelection, dateIndex, idx)}
+                      othersValue={dayOthers?.at(idx) ?? []}
+                      userCount={userCount}
+                      slotLength={slotLength}
                     />
                   )
                 })}
               </div>
             )
-          })}
-        </div>
+          }
+
+          if (isOvernight && midnightSlotIndex > 0) {
+            const midnightHourIndex = midnightSlotIndex / slotsPerHour
+            const beforeHours = Array.from({ length: midnightHourIndex }).map((_, i) => renderHourGroup(i))
+            const afterHours = Array.from({ length: hoursPerColumn - midnightHourIndex }).map((_, i) => renderHourGroup(midnightHourIndex + i))
+            return (
+              <div className="flex flex-col gap-y-4" id="slot-column">
+                <div className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5 cursor-pointer">
+                  {beforeHours}
+                </div>
+                <div className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5 cursor-pointer">
+                  {afterHours}
+                </div>
+              </div>
+            )
+          }
+
+          return (
+            <div id="slot-column" className="flex flex-col rounded-2xl overflow-hidden gap-y-0.5 cursor-pointer">
+              {Array.from({ length: hoursPerColumn }).map((_, i) => renderHourGroup(i))}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
@@ -485,7 +498,7 @@ const ColumnHeader = ({
         <div className="font-sans">
           {date.toLocaleString('en-US', { month: 'numeric', day: 'numeric' })}
         </div>
-        <div className="opacity-30 uppercase font-time tracking-widest font-semibold">
+        <div className="opacity-30 uppercase font-sans tracking-widest font-semibold">
           {date.toLocaleString('en-US', { weekday: 'short' })}
         </div>
       </>
@@ -502,7 +515,9 @@ const Slot = ({
   timeIndex,
   isSelected,
   isDragSelected,
-  othersValue
+  othersValue,
+  userCount,
+  slotLength,
 }: {
   isCreate: boolean
   dateIndex: number
@@ -510,6 +525,8 @@ const Slot = ({
   isSelected: boolean
   isDragSelected: boolean
   othersValue: number[] | null
+  userCount: number
+  slotLength: number
 }) => {
   const {
     calculateCreateSlotColor,
@@ -521,12 +538,12 @@ const Slot = ({
   let slotColor, alpha, showOthers
 
   if (isCreate) {
-    ;({ slotColor, alpha } = calculateCreateSlotColor(
+    ; ({ slotColor, alpha } = calculateCreateSlotColor(
       isSelected,
       isDragSelected
     ))
   } else {
-    ;({
+    ; ({
       res: { slotColor, alpha },
       showOthers
     } = calculateJoinSlotColor(isSelected, isDragSelected, othersValue ?? []))
@@ -535,12 +552,12 @@ const Slot = ({
   return (
     <div
       className="schedule-slot flex flex-grow w-full justify-center items-center"
-      style={{ height: CELL_HEIGHT }}
+      style={{ height: CELL_HEIGHT_FOR_SLOT(slotLength) }}
       onPointerDown={() => {
         handleMouseDownSlot(dateIndex, timeIndex, isSelected)
       }}
     >
-      <div className={`relative w-full h-full bg-background overflow-hidden `}>
+      <div className={`relative w-full h-full bg-background overflow-hidden`}>
         <div
           className="absolute w-full h-full"
           style={{
@@ -548,45 +565,33 @@ const Slot = ({
             background: slotColor?.toHexString()
           }}
         />
-        <div className="absolute z-10 w-full h-full flex-1 flex-grow flex flex-row justify-around items-center ">
-          {!isCreate &&
-            hoveringUser === null &&
-            showOthers &&
-            othersValue?.map((v: number, i: number) => (
-              <div
-                key={i}
-                style={{
-                  width: CELL_HEIGHT / 3,
-                  height: CELL_HEIGHT / 3,
-                  backgroundColor: Colors.othersColors[v],
-                  borderRadius: 100
-                }}
-              />
-            ))}
-        </div>
+        {!isCreate && hoveringUser === null && showOthers && othersValue && othersValue.length > 0 && (
+          <div
+            className="absolute z-10 w-full h-full"
+            style={{
+              background: othersValue.length === 1
+                ? getOtherUserColor(othersValue[0], userCount - 1, tinycolor(Colors.othersColors[0])).toHexString()
+                : `linear-gradient(to right, ${othersValue
+                  .map((v, i) => {
+                    const color = getOtherUserColor(v, userCount - 1, tinycolor(Colors.othersColors[0])).toHexString()
+                    const start = (i / othersValue.length) * 100
+                    const end = ((i + 1) / othersValue.length) * 100
+                    return `${color} ${start}% ${end}%`
+                  })
+                  .join(', ')})`
+            }}
+          />
+        )}
       </div>
     </div>
   )
 }
 
 const ScheduleControls = () => {
-  const { data, editSchedule, isCreate } = useScheduleContext()
-  const navigate = useNavigate()
+  const { data, editSchedule } = useScheduleContext()
 
   return (
-    <div className="flex flex-row justify-between gap-4">
-      <div className="flex flex-row gap-4">
-        {!isCreate && false && (
-          <Button
-            onClick={() => {
-              if (shareRoom(data, navigate)) toast.success('Created new room.')
-            }}
-          >
-            <FontAwesomeIcon icon={faClone} />
-            Clone
-          </Button>
-        )}
-      </div>
+    <div className="flex flex-row justify-end gap-4">
       <Button
         onClick={() => {
           editSchedule({

@@ -6,7 +6,6 @@ import { addDays, startOfDay } from 'date-fns'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faSquareUpRight } from '@fortawesome/free-solid-svg-icons'
 
-import { Tabs, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -18,8 +17,8 @@ import { DateSelect, DaySelectMode } from '@/components/DateSelect'
 
 const storedCreateState = ((storedStr: string | null) =>
   typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
-  localStorage.getItem('storedCreateState')
-)
+    localStorage.getItem('storedCreateState')
+  )
 
 const CreateOptions = ({
   scheduleData,
@@ -106,19 +105,16 @@ const CreateOptions = ({
 
           <div className="flex flex-col gap-y-2 mr-4">
             <div className="flex flex-row items-center justify-end gap-x-4 ">
-              <Label className="ml-2 text-sm font-medium text-muted-foreground">
-                From
-              </Label>
-              <div className="flex flex-row gap-x-2">
+              <div className="flex flex-row">
                 <Input
-                  className={`w-12 text-center ${timeInputs.from !== scheduleData.timeRange.from.hour ? 'ring-2 ring-offset-0 ring-red-500 focus-visible:ring-red-500' : ''}`}
+                  className={`w-12 rounded-r-none text-center ${timeInputs.from !== scheduleData.timeRange.from.hour ? 'border-destructive focus-visible:border-destructive' : ''}`}
                   onChange={e => {
                     handleTimeInput(e.target.value, true)
                   }}
                   value={timeInputs.from}
                 />
                 <Button
-                  className="w-12"
+                  className="w-12 rounded-l-none"
                   onClick={() =>
                     setScheduleData({
                       ...scheduleData,
@@ -135,22 +131,21 @@ const CreateOptions = ({
                   {scheduleData.timeRange.from.isAM ? 'am' : 'pm'}
                 </Button>
               </div>
-            </div>
 
-            <div className="flex flex-row items-center justify-end gap-x-4 ">
-              <Label className="ml-2 text-sm font-medium text-muted-foreground">
-                To
+              <Label className="text-sm font-medium text-muted-foreground">
+                to
               </Label>
-              <div className="flex flex-row gap-x-2">
+
+              <div className="flex flex-row ">
                 <Input
-                  className={`w-12 text-center ${timeInputs.to !== scheduleData.timeRange.to.hour ? 'ring-2 ring-offset-0 ring-red-500 focus-visible:ring-red-500' : ''}`}
+                  className={`w-12 rounded-r-none text-center ${timeInputs.to !== scheduleData.timeRange.to.hour ? 'border-destructive focus-visible:border-destructive' : ''}`}
                   onChange={e => {
                     handleTimeInput(e.target.value, false)
                   }}
                   value={timeInputs.to}
                 />
                 <Button
-                  className="w-12"
+                  className="w-12 rounded-l-none"
                   onClick={() =>
                     setScheduleData({
                       ...scheduleData,
@@ -174,7 +169,7 @@ const CreateOptions = ({
               htmlFor="slot-length"
               className="ml-2 text-sm font-medium text-muted-foreground"
             >
-              Granularity
+              Precision
             </Label>
             <ToggleGroup
               id="slot-length"
@@ -246,48 +241,27 @@ const Create = () => {
 
   return (
     <main className="gap-x-8 w-full max-w-3xl mx-auto">
-      <Tabs defaultValue="time">
-        {/* <TabsList className="mb-4">
-          <TabsTrigger value="time">
-            <FontAwesomeIcon icon={faHandshake} />
-            Time
-          </TabsTrigger>
-          <TabsTrigger value="days">
-            <FontAwesomeIcon icon={faPlaneDeparture} />
-            Days
-          </TabsTrigger>
-        </TabsList>
-      */}
-        <TabsContent value="time" className="rounded-md">
-          <div className="flex flex-col gap-4">
-            <CreateOptions
-              scheduleData={scheduleData}
-              setScheduleData={setScheduleData}
-              shareRoom={shareRoom}
-            />
+      <div className="flex flex-col gap-4">
+        <CreateOptions
+          scheduleData={scheduleData}
+          setScheduleData={setScheduleData}
+          shareRoom={shareRoom}
+        />
 
-            {scheduleData.dates.dates.length > 0 ? (
-              <Schedule
-                data={scheduleData}
-                isCreate={true}
-                hoveringUser={null}
-                setHoveredSlotUsers={() => {}}
-                editSchedule={newSchedule => setScheduleData(newSchedule)}
-              />
-            ) : (
-              <div className="flex mt-6 justify-center ">
-                You haven't selected any days!
-              </div>
-            )}
+        {scheduleData.dates.dates.length > 0 ? (
+          <Schedule
+            data={scheduleData}
+            isCreate={true}
+            hoveringUser={null}
+            setHoveredSlotUsers={() => { }}
+            editSchedule={newSchedule => setScheduleData(newSchedule)}
+          />
+        ) : (
+          <div className="flex mt-6 opacity-80 justify-center">
+            You haven't selected any days!
           </div>
-        </TabsContent>
-        <TabsContent value="days">
-          <div className="w-full mt-12 flex flex-col justify-center items-center">
-            <span>I'm working on this one...</span>
-            <span className="mt-4 text-4xl">🫣</span>
-          </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </main>
   )
 }

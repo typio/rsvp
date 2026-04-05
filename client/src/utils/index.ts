@@ -11,9 +11,13 @@ export const SITE_URL =
 export const API_URL =
   process.env.NODE_ENV === 'development'
     ? 'http://localhost:3632'
-    : 'https://api.cmon.rsvp'
+    : 'https://cmon.rsvp'
 
-export const h12To24 = (hour: number, isAM: boolean) => hour + (isAM ? 0 : 12)
+export const h12To24 = (hour: number, isAM: boolean) => {
+  if (isAM && hour === 12) return 0
+  if (!isAM && hour !== 12) return hour + 12
+  return hour
+}
 export const h24To12 = (hour: number): H12Time => {
   return { hour: '' + (hour > 12 ? hour - 12 : hour), isAM: hour < 12 }
 }

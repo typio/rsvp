@@ -106,6 +106,14 @@ export const useWebSocketUpdates = (
         setScheduleData(prev => ({ ...prev, eventName }))
       },
 
+      removedFromRoom: () => {
+        toast.warning('You were removed from this room by the owner.', {
+          duration: Infinity,
+          cancel: { label: 'Dismiss', onClick: () => {} }
+        })
+        navigate('/')
+      },
+
       roomDeleted: () => {
         toast.warning('Room was deleted by owner!', {
           duration: Infinity,
@@ -256,6 +264,8 @@ const Join = () => {
           setHasHoveredUser={setHasHoveredUser}
           hoveredSlotUsers={hoveredSlotUsers}
           absentReasons={expandReasons(scheduleData.absentReasons)}
+          isOwner={isOwner}
+          sendMessage={sendMessage}
         />
 
         <div>
@@ -270,20 +280,38 @@ const Join = () => {
           )}
         </div>
 
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4 flex justify-center gap-3">
           {isOwner ? (
             <Button variant={'destructive'} onClick={deleteRoom}>
               Delete Event
             </Button>
           ) : (
-            <AbsentButton
-              scheduleData={scheduleData}
-              setScheduleData={setScheduleData}
-              editSchedule={editSchedule}
-              isSettingAbsentReason={isSettingAbsentReason}
-              setIsSettingAbsentReason={setIsSettingAbsentReason}
-              sendMessage={sendMessage}
-            />
+            <>
+              <AbsentButton
+                scheduleData={scheduleData}
+                setScheduleData={setScheduleData}
+                editSchedule={editSchedule}
+                isSettingAbsentReason={isSettingAbsentReason}
+                setIsSettingAbsentReason={setIsSettingAbsentReason}
+                sendMessage={sendMessage}
+              />
+              <Button
+                variant={'destructive'}
+                size="sm"
+                onClick={() => {
+                  sendMessage(
+                    JSON.stringify({
+                      message_type: 'removeParticipant',
+                      payload: { leave: true }
+                    })
+                  )
+                  toast.success('Left the event.')
+                  navigate('/')
+                }}
+              >
+                Leave Event
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -337,7 +365,7 @@ const AbsentButton = ({
   return (
     <div className="flex flex-row gap-x-2 relative">
       <Button
-        className={`rounded-md border border-b-[3px] border-blue-950 h-10 text-destructive active:bg-destructive active:text-destructive-foreground active:border-red-800 ${userIsAbsent ? 'text-destructive-foreground bg-destructive border-b h-[38px] mt-[2px] border-red-800' : ''}`}
+        className={`rounded-md border border-b-[3px] border-background h-10 text-destructive active:bg-destructive active:text-destructive-foreground active:border-destructive ${userIsAbsent ? 'text-destructive-foreground bg-destructive border-b h-[38px] mt-[2px] border-destructive' : ''}`}
         onClick={() => {
           const newAbsentReason = userIsAbsent ? null : ''
           setScheduleData(prev => ({
@@ -544,7 +572,9 @@ const UserList = ({
   hasHoveredUser,
   setHasHoveredUser,
   hoveredSlotUsers,
-  absentReasons
+  absentReasons,
+  isOwner,
+  sendMessage
 }: {
   others: string[]
   hoveringUser: number | null
@@ -553,6 +583,8 @@ const UserList = ({
   setHasHoveredUser: React.Dispatch<React.SetStateAction<boolean>>
   hoveredSlotUsers: boolean[] | null
   absentReasons: (string | null)[]
+  isOwner: boolean
+  sendMessage: (message: string) => void
 }) => (
   <div className="flex flex-row justify-between items-end gap-x-16">
     <UserItem
@@ -573,6 +605,7 @@ const UserList = ({
           key={i}
           user={user}
           index={i + 1}
+          othersIndex={i}
           othersCount={others.length}
           hoveringUser={hoveringUser}
           setHoveringUser={setHoveringUser}
@@ -581,6 +614,8 @@ const UserList = ({
           hoveredSlotUsers={hoveredSlotUsers}
           isCurrentUser={false}
           absentReason={absentReasons[i + 1]}
+          isOwner={isOwner}
+          sendMessage={sendMessage}
         />
       ))}
     </div>
@@ -590,6 +625,7 @@ const UserList = ({
 const UserItem = ({
   user,
   index,
+  othersIndex,
   othersCount,
   hoveringUser,
   setHoveringUser,
@@ -597,10 +633,13 @@ const UserItem = ({
   setHasHoveredUser,
   hoveredSlotUsers,
   isCurrentUser,
-  absentReason
+  absentReason,
+  isOwner,
+  sendMessage
 }: {
   user: string
   index: number
+  othersIndex?: number
   othersCount?: number
   hoveringUser: number | null
   setHoveringUser: React.Dispatch<React.SetStateAction<number | null>>
@@ -609,6 +648,8 @@ const UserItem = ({
   hoveredSlotUsers: boolean[] | null
   isCurrentUser: boolean
   absentReason: string | null
+  isOwner?: boolean
+  sendMessage?: (message: string) => void
 }) => {
   const isAbsent = absentReason !== null
 
@@ -621,62 +662,98 @@ const UserItem = ({
       )
   const colorBrighter = color.brighten(20).toRgbString()
 
-  return (
-    <TooltipProvider>
-      <Tooltip delayDuration={0} open={isAbsent ? undefined : false}>
-        <TooltipTrigger className="min-w-max ">
-          <div
-            className={`flex flex-row justify-center items-center gap-x-2 duration-300 ${isCurrentUser ? 'select-none' : ''}`}
-            style={{
-              opacity:
-                (hoveringUser != null && hoveringUser != index) ||
-                (hoveredSlotUsers !== null && !hoveredSlotUsers[index])
-                  ? 0.1
-                  : 1,
-              // @ts-ignore
-              '--user-color': color.toString(),
-              '--bright-user-color': colorBrighter,
-              animation:
-                (hoveringUser === index ||
-                  (hoveredSlotUsers !== null && hoveredSlotUsers[index])) &&
-                !isAbsent
-                  ? 'glowAnimation 0.3s forwards, flameFlicker 1.75s ease-in-out infinite 0.3s, flamePulse 3s ease-in-out infinite 0.3s'
-                  : hasHoveredUser
-                    ? 'glowFadeOut 0.3s forwards'
-                    : ''
-            }}
-            onMouseEnter={() => {
-              if (!isAbsent) {
-                setHoveringUser(index)
-                setHasHoveredUser(true)
-              }
-            }}
-            onMouseLeave={() => setHoveringUser(null)}
-          >
-            <div className={`${isAbsent ? 'line-through' : ''}`}>
-              {isCurrentUser ? user : user?.length > 0 ? user : `User ${index}`}
-            </div>
+  const removeParticipant = () => {
+    if (sendMessage && othersIndex !== undefined) {
+      sendMessage(
+        JSON.stringify({
+          message_type: 'removeParticipant',
+          payload: { others_index: othersIndex }
+        })
+      )
+    }
+  }
 
-            {!isAbsent && (
-              <div
-                className={`w-3 h-3 ${isCurrentUser ? 'rounded bg-secondary' : 'rounded-full'} `}
-                style={
-                  !isCurrentUser ? { backgroundColor: color.toString() } : {}
-                }
-              />
-            )}
-          </div>
-        </TooltipTrigger>
-        <TooltipContent className="py-3 px-4">
-          {(absentReason?.trim() ?? '').length > 0 ? (
-            <p>{absentReason?.trim()}</p>
-          ) : (
-            <p className=" text-muted-foreground">This user can't make it.</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+  const userContent = (
+    <div
+      className={`flex flex-row justify-center items-center gap-x-2 duration-300 ${isCurrentUser ? 'select-none' : ''} ${isOwner && !isCurrentUser ? 'cursor-pointer' : ''}`}
+      style={{
+        opacity:
+          (hoveringUser != null && hoveringUser != index) ||
+          (hoveredSlotUsers !== null && !hoveredSlotUsers[index])
+            ? 0.1
+            : 1,
+        // @ts-ignore
+        '--user-color': color.toString(),
+        '--bright-user-color': colorBrighter,
+        animation:
+          (hoveringUser === index ||
+            (hoveredSlotUsers !== null && hoveredSlotUsers[index])) &&
+          !isAbsent
+            ? 'glowAnimation 0.3s forwards, flameFlicker 1.75s ease-in-out infinite 0.3s, flamePulse 3s ease-in-out infinite 0.3s'
+            : hasHoveredUser
+              ? 'glowFadeOut 0.3s forwards'
+              : ''
+      }}
+      onMouseEnter={() => {
+        if (!isAbsent) {
+          setHoveringUser(index)
+          setHasHoveredUser(true)
+        }
+      }}
+      onMouseLeave={() => setHoveringUser(null)}
+    >
+      <div className={`${isAbsent ? 'line-through' : ''}`}>
+        {isCurrentUser ? user : user?.length > 0 ? user : `User ${index}`}
+      </div>
+
+      {!isAbsent && (
+        <div
+          className={`w-3 h-3 ${isCurrentUser ? 'rounded bg-secondary' : 'rounded-full'} `}
+          style={
+            !isCurrentUser ? { backgroundColor: color.toString() } : {}
+          }
+        />
+      )}
+    </div>
   )
+
+  if (isOwner && !isCurrentUser) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>{userContent}</PopoverTrigger>
+        <PopoverContent className="w-auto p-2">
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={removeParticipant}
+          >
+            Remove
+          </Button>
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
+  if (isAbsent) {
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger className="min-w-max">
+            {userContent}
+          </TooltipTrigger>
+          <TooltipContent className="py-3 px-4">
+            {(absentReason?.trim() ?? '').length > 0 ? (
+              <p>{absentReason?.trim()}</p>
+            ) : (
+              <p className="text-muted-foreground">This user can't make it.</p>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
+
+  return userContent
 }
 
 export default Join

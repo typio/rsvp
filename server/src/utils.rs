@@ -49,7 +49,7 @@ pub fn generate_id(ip: &str, len: usize) -> String {
         num = new_num;
     }
 
-    id[..len].to_string()
+    id[..id.len().min(len)].to_string()
 }
 
 pub async fn get_user_uid_from_cookie(req: &Request<State>) -> Option<String> {

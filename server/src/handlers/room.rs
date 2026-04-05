@@ -13,73 +13,47 @@ use tide::Response;
 use tide::StatusCode;
 use time_new::ext::NumericalDuration;
 
-pub fn get_sanitized_others(
-    others_schedule: Vec<Vec<Vec<&str>>>,
-    users_of_room: Vec<(&str, &str)>,
-    user_uid: &str,
-) -> (Vec<String>, Vec<Vec<Vec<usize>>>) {
-    let mut other_names = Vec::with_capacity(users_of_room.len() - 1);
-    let mut other_users_indices_dict = HashMap::new();
-    let mut other_users_index = 0;
-    for (some_uid, some_name) in users_of_room.iter() {
-        if *some_uid != user_uid {
-            other_users_indices_dict.insert(some_uid, other_users_index);
-            other_users_index += 1;
-
-            other_names.push(some_name.to_string());
-        }
-    }
-
-    (
-        other_names,
-        others_schedule
-            .iter()
-            .map(|day| {
-                (*day)
-                    .iter()
-                    .map(|slot| {
-                        (*slot)
-                            .iter()
-                            .map(|uid| {
-                                let idx = other_users_indices_dict.get(uid);
-                                let idx = idx.unwrap();
-                                *idx
-                            })
-                            .collect()
-                    })
-                    .collect()
-            })
-            .collect(),
-    )
-}
-
-pub fn seperate_users_schedule<'a>(
-    schedule: Vec<Vec<Vec<&'a str>>>,
-    user_uid: &str,
-) -> (Vec<Vec<bool>>, Vec<Vec<Vec<&'a str>>>) {
-    let (user_schedule, others_schedule): (Vec<Vec<bool>>, Vec<Vec<Vec<&str>>>) = schedule
+pub fn seperate_users_schedule(
+    schedule: Vec<Vec<Vec<usize>>>,
+    user_index: Option<usize>,
+) -> (Vec<Vec<bool>>, Vec<Vec<Vec<usize>>>) {
+    schedule
         .into_iter()
         .map(|row| {
             row.into_iter()
                 .map(|cell| {
                     let mut is_user_in_cell = false;
                     let mut others_in_cell = Vec::with_capacity(cell.len());
-
-                    for uid in cell {
-                        if uid == user_uid {
+                    for idx in cell {
+                        if Some(idx) == user_index {
                             is_user_in_cell = true;
                         } else {
-                            others_in_cell.push(uid);
+                            others_in_cell.push(idx);
                         }
                     }
-
                     (is_user_in_cell, others_in_cell)
                 })
                 .unzip()
         })
-        .unzip();
+        .unzip()
+}
 
-    (user_schedule, others_schedule)
+pub fn remap_others_schedule(
+    others_schedule: &Vec<Vec<Vec<usize>>>,
+    participant_to_others: &HashMap<usize, usize>,
+) -> Vec<Vec<Vec<usize>>> {
+    others_schedule
+        .iter()
+        .map(|day| {
+            day.iter()
+                .map(|slot| {
+                    slot.iter()
+                        .filter_map(|p_idx| participant_to_others.get(p_idx).copied())
+                        .collect()
+                })
+                .collect()
+        })
+        .collect()
 }
 
 pub async fn process_room_data(
@@ -89,7 +63,14 @@ pub async fn process_room_data(
 ) -> Result<GetRoomRes, tide::Error> {
     let room: Room = sqlx::query_as(
         r#"
-        SELECT * FROM rooms
+        SELECT uid, event_name, schedule_type,
+               CAST(dates AS CHAR) as dates,
+               CAST(days_of_week AS CHAR) as days_of_week,
+               time_min, time_max, slot_length,
+               CAST(schedule AS CHAR) as schedule,
+               CAST(participants AS CHAR) as participants,
+               expires_at
+        FROM rooms
         WHERE uid=?
         "#,
     )
@@ -98,14 +79,19 @@ pub async fn process_room_data(
     .await
     .map_err(|e| match e {
         sqlx::Error::RowNotFound => tide::Error::from_str(StatusCode::NotFound, "Room not found"),
-        _ => tide::Error::from_str(StatusCode::InternalServerError, "Database error"),
+        other => {
+            println!("SQLx error: {:?}", other);
+            tide::Error::from_str(StatusCode::InternalServerError, "Database error")
+        }
     })?;
 
-    // Process schedule
-    let schedule: Vec<Vec<Vec<&str>>> = serde_json::from_str(&room.schedule)?;
-    let (user_schedule, others_schedule) = seperate_users_schedule(schedule, user_uid);
+    let participants: Vec<String> = serde_json::from_str(&room.participants)?;
+    let schedule: Vec<Vec<Vec<usize>>> = serde_json::from_str(&room.schedule)?;
+    let user_index = participants.iter().position(|p| p == user_uid);
 
-    // get users
+    let (user_schedule, others_schedule) = seperate_users_schedule(schedule, user_index);
+
+    // Get all users in the room
     let users_of_room: Vec<(String, String, bool, String)> = sqlx::query_as(
         r#"
         SELECT user_uid, name, is_absent, absent_reason FROM users_of_rooms
@@ -116,7 +102,13 @@ pub async fn process_room_data(
     .fetch_all(&state.db_pool)
     .await?;
 
-    // Requesting user might not be in room yet (as in GET request), that's ok
+    // Build a lookup from uid → (name, is_owner, is_absent, absent_reason)
+    let user_info: HashMap<&str, (&str, bool, &str)> = users_of_room
+        .iter()
+        .map(|(uid, name, is_absent, reason)| (uid.as_str(), (name.as_str(), *is_absent, reason.as_str())))
+        .collect();
+
+    // Current user info
     let (user_name, is_owner, is_absent, absent_reason): (String, bool, bool, String) =
         sqlx::query_as(
             r#"
@@ -130,28 +122,32 @@ pub async fn process_room_data(
         .await
         .unwrap_or((String::new(), false, false, String::new()));
 
-    let user_uids_and_names_of_room: Vec<(&str, &str)> = users_of_room
-        .iter()
-        .map(|(uid, name, _, _)| (uid.as_ref(), name.as_ref()))
-        .collect();
+    // Build others list: participants (excluding current user) in order,
+    // then any absent-only users not in participants
+    let mut others_names = Vec::new();
+    let mut absent_reasons = Vec::new();
+    let mut participant_to_others: HashMap<usize, usize> = HashMap::new();
 
-    let (others_names, others_schedule_indices) =
-        get_sanitized_others(others_schedule, user_uids_and_names_of_room, user_uid);
-
-    let mut absent_reasons = Vec::with_capacity(users_of_room.len() + 1);
     absent_reasons.push(if is_absent { Some(absent_reason) } else { None });
-    absent_reasons.extend(
-        users_of_room
-            .iter()
-            .filter(|(this_user_uid, _, _, _)| this_user_uid != user_uid)
-            .map(|(_, _, is_absent, absent_reason)| {
-                if *is_absent {
-                    Some(absent_reason.to_owned())
-                } else {
-                    None
-                }
-            }),
-    );
+
+    for (p_idx, p_uid) in participants.iter().enumerate() {
+        if Some(p_idx) != user_index {
+            participant_to_others.insert(p_idx, others_names.len());
+            let (name, p_absent, reason) = user_info.get(p_uid.as_str()).copied().unwrap_or(("", false, ""));
+            others_names.push(name.to_string());
+            absent_reasons.push(if p_absent { Some(reason.to_string()) } else { None });
+        }
+    }
+
+    // Append absent-only users not in participants
+    for (uid, name, u_absent, reason) in &users_of_room {
+        if uid != user_uid && !participants.contains(uid) {
+            others_names.push(name.clone());
+            absent_reasons.push(if *u_absent { Some(reason.clone()) } else { None });
+        }
+    }
+
+    let others_schedule_remapped = remap_others_schedule(&others_schedule, &participant_to_others);
 
     Ok(GetRoomRes {
         event_name: room.event_name,
@@ -160,7 +156,7 @@ pub async fn process_room_data(
         days_of_week: serde_json::from_str(&room.days_of_week)?,
         slot_length: room.slot_length,
         user_schedule,
-        others_schedule: others_schedule_indices,
+        others_schedule: others_schedule_remapped,
         others_names,
         user_name,
         time_range: TimeRange {
@@ -181,6 +177,15 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         }
     };
 
+    if req_body.event_name.len() > 64
+        || req_body.time_range.from_hour >= 24
+        || req_body.time_range.to_hour > 24
+        || req_body.slot_length == 0
+        || req_body.schedule.is_empty()
+    {
+        return Ok(Response::new(StatusCode::BadRequest));
+    }
+
     let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
     let mut response = Response::new(StatusCode::Ok);
@@ -199,8 +204,6 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         }
     }
 
-    // TODO: create a process that deletes expired rooms
-
     let room_uid: String;
 
     loop {
@@ -215,7 +218,7 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
                 room_uid = temp_uid;
                 break;
             }
-            Err(e) => panic!("{}", e),
+            Err(_) => return Ok(Response::new(StatusCode::InternalServerError)),
         };
     }
 
@@ -224,6 +227,8 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         ScheduleDates::DaysOfWeek(d) => (1u8, serde_json::json!([]), json!(d)),
     };
 
+    let participants = json!([user_uid.clone().unwrap()]);
+
     let schedule = json!(req_body
         .schedule
         .iter()
@@ -231,9 +236,9 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
             row.iter()
                 .map(|&avail| {
                     if avail {
-                        vec![user_uid.clone().unwrap()]
+                        vec![0u32]
                     } else {
-                        vec![]
+                        vec![] as Vec<u32>
                     }
                 })
                 .collect::<Vec<_>>()
@@ -246,8 +251,8 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
 
     let _ = match sqlx::query!(
         r#"
-        INSERT INTO rooms (uid, event_name, schedule_type, dates, days_of_week, time_min, time_max, slot_length, schedule, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO rooms (uid, event_name, schedule_type, dates, days_of_week, time_min, time_max, slot_length, schedule, participants, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         room_uid,
         req_body.event_name,
@@ -258,6 +263,7 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         req_body.time_range.to_hour,
         req_body.slot_length,
         schedule,
+        participants,
         expiry
     )
     .execute(&mut *transaction)
@@ -304,7 +310,8 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
 }
 
 pub async fn get_room(req: Request<State>) -> tide::Result {
-    let room_uid = req.param("room_uid")?;
+    let room_uid = req.param("room_uid")?.to_uppercase();
+    let room_uid = room_uid.as_str();
 
     let mut response = Response::new(StatusCode::Ok);
 
@@ -330,24 +337,24 @@ pub async fn delete_room(req: Request<State>) -> tide::Result {
 
     let user_uid: String = get_user_uid_from_cookie(&req).await.unwrap_or_default();
 
-    if user_uid.len() == 0 {
-        return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
+    if user_uid.is_empty() {
+        return Ok(Response::new(StatusCode::Unauthorized));
     }
 
     let user_uid: &str = user_uid.as_ref();
+
+    let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
     let (is_owner,): (bool,) =
         sqlx::query_as("SELECT is_owner FROM users_of_rooms WHERE user_uid=? AND room_uid=?")
             .bind(user_uid)
             .bind(room_uid)
-            .fetch_one(&req.state().db_pool)
+            .fetch_one(&mut *transaction)
             .await?;
 
     if !is_owner {
-        return Ok(Response::new(StatusCode::NetworkAuthenticationRequired));
+        return Ok(Response::new(StatusCode::Forbidden));
     }
-
-    let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
     match sqlx::query(
         r#"
@@ -374,15 +381,81 @@ pub async fn delete_room(req: Request<State>) -> tide::Result {
 
     transaction.commit().await?;
 
-    for (this_user_uid, user_wsc) in req.state().rooms.lock().await.get(room_uid).unwrap().iter() {
-        if *this_user_uid != user_uid {
-            let _ = user_wsc
-                .send_json(&RoomDeletedPing {
-                    message_type: "roomDeleted".to_string(),
-                })
-                .await;
+    if let Some(room) = req.state().rooms.lock().await.get(room_uid) {
+        for (this_user_uid, user_wsc) in room.iter() {
+            if *this_user_uid != user_uid {
+                let _ = user_wsc
+                    .send_json(&RoomDeletedPing {
+                        message_type: "roomDeleted".to_string(),
+                    })
+                    .await;
+            }
         }
     }
 
+    Ok(response)
+}
+
+pub async fn og_page(req: Request<State>) -> tide::Result {
+    let room_uid = req.param("room_uid")?.to_uppercase();
+    let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://cmon.rsvp".to_string());
+
+    let room_info: Option<(String,)> = sqlx::query_as(
+        "SELECT event_name FROM rooms WHERE uid=?"
+    )
+    .bind(&room_uid)
+    .fetch_optional(&req.state().db_pool)
+    .await?;
+
+    let participant_count: Option<(i64,)> = sqlx::query_as(
+        "SELECT COUNT(*) FROM users_of_rooms WHERE room_uid=?"
+    )
+    .bind(&room_uid)
+    .fetch_optional(&req.state().db_pool)
+    .await?;
+
+    let (title, description) = match room_info {
+        Some((event_name,)) => {
+            let count = participant_count.map(|(c,)| c).unwrap_or(0);
+            let desc = if count > 0 {
+                format!("{} {} responded. Add your availability.", count, if count == 1 { "person has" } else { "people have" })
+            } else {
+                "Be the first to add your availability.".to_string()
+            };
+            (format!("Join '{}' on cmon.rsvp", event_name), desc)
+        }
+        None => (
+            "cmon.rsvp".to_string(),
+            "This room may have expired or been deleted.".to_string(),
+        ),
+    };
+
+    let html = format!(
+        r##"<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>{title}</title>
+<meta name="description" content="{description}" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="{title}" />
+<meta property="og:description" content="{description}" />
+<meta property="og:image" content="{frontend_url}/og-image.png" />
+<meta property="og:url" content="{frontend_url}/{room_uid}" />
+<meta property="og:site_name" content="cmon.rsvp" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="{title}" />
+<meta name="twitter:description" content="{description}" />
+<meta name="twitter:image" content="{frontend_url}/og-image.png" />
+<meta name="theme-color" content="#0a1929" />
+<meta http-equiv="refresh" content="0;url={frontend_url}/{room_uid}" />
+</head>
+<body></body>
+</html>"##
+    );
+
+    let mut response = Response::new(StatusCode::Ok);
+    response.set_content_type("text/html");
+    response.set_body(html);
     Ok(response)
 }

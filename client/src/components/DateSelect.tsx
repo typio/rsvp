@@ -29,13 +29,13 @@ export enum DaySelectMode {
 export type WeekDayNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type SelectedDates =
   | {
-      mode: DaySelectMode.Dates
-      dates: string[]
-    }
+    mode: DaySelectMode.Dates
+    dates: string[]
+  }
   | {
-      mode: DaySelectMode.DaysOfWeek
-      dates: WeekDayNumber[]
-    }
+    mode: DaySelectMode.DaysOfWeek
+    dates: WeekDayNumber[]
+  }
 
 export const DAYS_OF_WEEK = {
   three_letter_abbrv: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -76,7 +76,7 @@ export const DateSelect = ({
           <Button
             variant={'outline'}
             className={cn(
-              'justify-start text-left font-normal gap-x-2 text-white',
+              'justify-start text-left font-normal gap-x-2 text-foreground',
               isInactive && 'text-muted-foreground'
             )}
           >
@@ -96,7 +96,7 @@ export const DateSelect = ({
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className={`w-auto ${showError ? 'border-destructive' : ''}`}
+          className={`border-2 ${mode === DaySelectMode.DaysOfWeek ? 'max-w-[420px] w-[calc(100vw-2rem)]' : 'w-[calc(100vw-2rem)] max-w-[calc(50px*7+2rem)]'} ${showError ? 'border-destructive' : ''}`}
         >
           {mode === DaySelectMode.DaysOfWeek ? (
             <DaysOfWeekCalendar dates={dates} setDates={setDates} />
@@ -125,8 +125,12 @@ const DaysOfWeekCalendar = ({
 
   useEffect(() => {
     const handleMouseUp = () => setIsSelecting(null)
-    window.addEventListener('mouseup', handleMouseUp)
-    return () => window.removeEventListener('mouseup', handleMouseUp)
+    window.addEventListener('pointerup', handleMouseUp)
+    window.addEventListener('pointercancel', handleMouseUp)
+    return () => {
+      window.removeEventListener('pointerup', handleMouseUp)
+      window.removeEventListener('pointercancel', handleMouseUp)
+    }
   }, [])
 
   const handleDaySelect = (day: WeekDayNumber, additive: boolean) => {
@@ -142,7 +146,7 @@ const DaysOfWeekCalendar = ({
   }
 
   return (
-    <div className="flex flex-row justify-center">
+    <div className="grid grid-cols-7 gap-1.5 w-full" style={{ touchAction: 'none' }}>
       {DAYS_OF_WEEK.three_letter_abbrv.map((day, _i) => {
         const i = _i as WeekDayNumber
 
@@ -154,19 +158,24 @@ const DaysOfWeekCalendar = ({
         return (
           <div
             key={i}
-            className={`h-36 w-14 px-0.5 select-none flex justify-center items-center`}
-            onMouseDown={() => {
+            className="select-none h-28 "
+            onPointerDown={(e) => {
+              (e.target as Element).releasePointerCapture(e.pointerId)
               setIsSelecting(!isSelected)
               handleDaySelect(i, !isSelected)
             }}
-            onMouseEnter={() => {
+            onPointerEnter={() => {
               if (isSelecting !== null) handleDaySelect(i, isSelecting)
             }}
           >
-            <div className="absolute text-sm font-medium">{day}</div>
             <div
-              className={`h-full w-full flex items-center justify-center shadow-xl duration-300 ${isSelected ? 'bg-secondary bg-white/10 text-white' : 'bg-white/5 text-zinc-100 backdrop-blur-[1px]'} border-white/5 border-2 rounded-lg font-medium text-sm`}
-            ></div>
+              className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm duration-200 border-2 ${isSelected
+                ? 'bg-secondary/80 border-secondary text-white shadow-lg'
+                : 'bg-white/5 border-white/5 text-white/70'
+                }`}
+            >
+              {day}
+            </div>
           </div>
         )
       })}
@@ -239,11 +248,11 @@ const DatesCalendar = ({
       // Clear any existing timeout
       if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current)
       else {
-        toast.error('You must become a Pro member to select 2+ weeks!', {
+        toast.error('Selecting 2+ weeks requires Pro tier!', {
           description: 'Pro subscriptions are not available.',
           action: {
-            label: 'Ok, sorry.',
-            onClick: () => {}
+            label: 'Ok.',
+            onClick: () => { }
           }
         })
       }
@@ -303,7 +312,7 @@ const DatesCalendar = ({
     }
 
     for (let i = 0; i < firstDayOfMonth; i++) {
-      days.push(<div key={`empty-${i}`} className="w-10 h-10" />)
+      days.push(<div key={`empty-${i}`} className="aspect-square" />)
     }
 
     const firstDateOfMonth = new Date(year, month, 1)
@@ -331,7 +340,7 @@ const DatesCalendar = ({
       days.push(
         <div
           key={day}
-          className={`w-10 h-10 flex justify-center items-center select-none text-sm font-medium
+          className={`aspect-square flex justify-center items-center select-none text-sm sm:text-base font-medium
           ${isSameDay(date, new Date()) ? 'text-primary' : ''} 
           ${isSelected ? `bg-secondary ${roundedCorners} z-10` : ' bg-background text-muted-foreground active:text-muted-foreground xl:active:text-white '}
           ${day === 1 ? 'rounded-tl-md' : ''}
@@ -372,24 +381,24 @@ const DatesCalendar = ({
       style={{ touchAction: 'none' }}
     >
       <div className="flex flex-row justify-between items-center mb-4">
-        <Button variant="ghost" onClick={() => changeMonth(-1)}>
+        <Button variant="ghost" className='w-[50px]' onClick={() => changeMonth(-1)}>
           <FontAwesomeIcon icon={faArrowLeft} />
         </Button>
-        <span className="text-sm">
+        <span className="text-sm sm:text-base">
           {currentDate.toLocaleString('default', {
             month: 'long',
             year: 'numeric'
           })}
         </span>
-        <Button variant="ghost" onClick={() => changeMonth(1)}>
+        <Button variant="ghost" className='w-[50px]' onClick={() => changeMonth(1)}>
           <FontAwesomeIcon icon={faArrowRight} />
         </Button>
       </div>
-      <div className="grid grid-cols-7 ">
+      <div className="grid grid-cols-7">
         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
           <div
             key={day}
-            className="w-10 h-10 flex items-center justify-center text-muted-foreground text-sm font-medium"
+            className="aspect-square flex items-center justify-center text-muted-foreground text-sm font-medium"
           >
             {day}
           </div>
