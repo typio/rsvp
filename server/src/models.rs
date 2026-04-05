@@ -49,6 +49,7 @@ pub struct Room {
     pub slot_length: u8,
     pub schedule: String,
     pub participants: String,
+    pub timezone: String,
     pub expires_at: time_new::OffsetDateTime,
 }
 
@@ -78,6 +79,7 @@ pub struct GetRoomRes {
     pub time_range: TimeRange,
     pub is_owner: bool,
     pub absent_reasons: Vec<Option<String>>,
+    pub timezone: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -95,6 +97,7 @@ pub struct CreateRoomReq {
     pub slot_length: u8,
     pub schedule: Vec<Vec<bool>>,
     pub time_range: TimeRange,
+    pub timezone: String,
 }
 
 #[derive(Serialize)]

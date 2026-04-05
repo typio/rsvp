@@ -25,4 +25,5 @@ export type ScheduleData = {
   othersSchedule: number[][][]
   others: string[]
   absentReasons: (string | null)[]
+  timezone: string
 }

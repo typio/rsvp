@@ -197,6 +197,7 @@ pub async fn handle_websocket_message(
                            time_min, time_max, slot_length,
                            CAST(schedule AS CHAR) as schedule,
                            CAST(participants AS CHAR) as participants,
+                           timezone,
                            expires_at
                     FROM rooms
                     WHERE uid=?
@@ -484,6 +485,7 @@ pub async fn handle_websocket_message(
                            time_min, time_max, slot_length,
                            CAST(schedule AS CHAR) as schedule,
                            CAST(participants AS CHAR) as participants,
+                           timezone,
                            expires_at
                     FROM rooms
                     WHERE uid=?

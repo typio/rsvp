@@ -69,6 +69,7 @@ pub async fn process_room_data(
                time_min, time_max, slot_length,
                CAST(schedule AS CHAR) as schedule,
                CAST(participants AS CHAR) as participants,
+               timezone,
                expires_at
         FROM rooms
         WHERE uid=?
@@ -165,6 +166,7 @@ pub async fn process_room_data(
         },
         is_owner,
         absent_reasons,
+        timezone: room.timezone,
     })
 }
 
@@ -251,8 +253,8 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
 
     let _ = match sqlx::query!(
         r#"
-        INSERT INTO rooms (uid, event_name, schedule_type, dates, days_of_week, time_min, time_max, slot_length, schedule, participants, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO rooms (uid, event_name, schedule_type, dates, days_of_week, time_min, time_max, slot_length, schedule, participants, timezone, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
         room_uid,
         req_body.event_name,
@@ -264,6 +266,7 @@ pub async fn create_room(mut req: Request<State>) -> tide::Result {
         req_body.slot_length,
         schedule,
         participants,
+        req_body.timezone,
         expiry
     )
     .execute(&mut *transaction)

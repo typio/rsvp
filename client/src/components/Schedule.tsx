@@ -74,7 +74,8 @@ export const shareRoom = (
         ) || 0
     },
     slot_length: scheduleData.slotLength,
-    schedule: scheduleData.userSchedule
+    schedule: scheduleData.userSchedule,
+    timezone: scheduleData.timezone
   })
 
   fetch(`${API_URL}/api/rooms`, {
@@ -116,6 +117,8 @@ type TimeCalculations = {
   hoursPerColumn: number
   fromHour24: number
   toHour24: number
+  hasTzOffset: boolean
+  hasDstMismatch: boolean
 }
 
 const Schedule = ({
@@ -131,14 +134,40 @@ const Schedule = ({
   hoveringUser: number | null
   setHoveredSlotUsers: (arg0: any) => void
 }) => {
-  const fromHour24 = convertTo24Hour(
+  // Room's original hours (owner's timezone)
+  const roomFromHour24 = convertTo24Hour(
     data.timeRange.from.hour,
     data.timeRange.from.isAM
   )
-  const toHour24 = convertTo24Hour(
+  const roomToHour24 = convertTo24Hour(
     data.timeRange.to.hour,
     data.timeRange.to.isAM
   )
+
+  // Timezone offset
+  const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const roomTz = data.timezone
+  const hasTzOffset = !!(roomTz && roomTz !== viewerTz)
+
+  const getOffsetForDate = (date: Date) => {
+    const roomTime = new Date(date.toLocaleString('en-US', { timeZone: roomTz }))
+    const viewerTime = new Date(date.toLocaleString('en-US', { timeZone: viewerTz }))
+    return Math.round((viewerTime.getTime() - roomTime.getTime()) / 3600000)
+  }
+
+  const tzOffsetHours = (() => {
+    if (!hasTzOffset) return 0
+    return getOffsetForDate(new Date())
+  })()
+
+  // Check if DST transition causes offset to vary across schedule dates
+  const hasDstMismatch = hasTzOffset && data.dates.dates.length > 1 && (() => {
+    const offsets = data.dates.dates.map(d => getOffsetForDate(new Date(d as string)))
+    return offsets.some(o => o !== offsets[0])
+  })()
+
+  const fromHour24 = ((roomFromHour24 + tzOffsetHours) % 24 + 24) % 24
+  const toHour24 = ((roomToHour24 + tzOffsetHours) % 24 + 24) % 24
 
   const timeDifference =
     fromHour24 === toHour24
@@ -167,7 +196,9 @@ const Schedule = ({
           slotsPerColumn,
           hoursPerColumn,
           fromHour24,
-          toHour24
+          toHour24,
+          hasTzOffset,
+          hasDstMismatch
         }}
       />
     </ScheduleProvider>
@@ -229,7 +260,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
             }}
           >
             {time.timeDifference > 0 && (() => {
-              const isOvernight = time.fromHour24 > time.toHour24
+              const isOvernight = time.fromHour24 > time.toHour24 || (time.fromHour24 === time.toHour24 && time.fromHour24 !== 0)
               const midnightHourIndex = isOvernight ? 24 - time.fromHour24 : -1
               return Array.from({
                 length: time.timeDifference / 60 + 1
@@ -244,7 +275,7 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                     {isOvernight && i === midnightHourIndex && (
                       <div className="h-4" />
                     )}
-                    <div style={{ height: 0, lineHeight: 0 }}>
+                    <div style={{ height: 0, lineHeight: 0 }} className="font-medium ">
                       {formatTime(currentHour, minutes)}
                     </div>
                   </div>
@@ -338,6 +369,8 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
                     rightIsAdj={rightIsAdj}
                     mode={data.dates.mode}
                     date={thisDate}
+                    prevDate={dateIndex > 0 && data.dates.mode === DaySelectMode.Dates ? new Date(data.dates.dates[dateIndex - 1] as string) : undefined}
+                    isFirstColumn={dateIndex === 0}
                     dayN={thisDayOfWeek}
                     slotLength={data.slotLength}
                     fromHour24={time.fromHour24}
@@ -373,6 +406,16 @@ const ScheduleContent = ({ time }: { time: TimeCalculations }) => {
           </div>
         )}
       </div>
+      {time.hasTzOffset && (
+        <div className="text-xs mb-6 text-muted-foreground text-center mt-4">
+          Times shown in your timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone})
+          {time.hasDstMismatch && (
+            <div className="text-destructive mt-2">
+              A daylight saving transition falls within these dates,<br /> some days may be off by 1 hour.
+            </div>
+          )}
+        </div>
+      )}
       {time.timeDifference > 0 ? (
         <ScheduleControls />
       ) : (
@@ -397,6 +440,8 @@ type DayColumnProps = {
   rightIsAdj: boolean
   mode: DaySelectMode
   date: Date | undefined
+  prevDate: Date | undefined
+  isFirstColumn: boolean
   dayN: number | undefined
   slotLength: number
   fromHour24: number
@@ -416,12 +461,14 @@ const DayColumn = ({
   rightIsAdj,
   mode,
   date,
+  prevDate,
+  isFirstColumn,
   dayN,
   slotLength,
   fromHour24,
   toHour24
 }: DayColumnProps) => {
-  const isOvernight = fromHour24 > toHour24
+  const isOvernight = fromHour24 > toHour24 || (fromHour24 === toHour24 && fromHour24 !== 0)
   const midnightSlotIndex = isOvernight ? (24 - fromHour24) * slotsPerHour : -1
   return (
     <div className={`flex flex-col min-w-14 w-full`}>
@@ -432,7 +479,7 @@ const DayColumn = ({
           className="flex flex-grow flex-col justify-center items-center text-sm"
           style={{ height: HEADER_HEIGHT }}
         >
-          <ColumnHeader mode={mode} date={date} dayN={dayN} />
+          <ColumnHeader mode={mode} date={date} prevDate={prevDate} isFirstColumn={isFirstColumn} dayN={dayN} />
         </div>
         {(() => {
           const renderHourGroup = (hourIndex: number) => {
@@ -490,13 +537,21 @@ const DayColumn = ({
 const ColumnHeader = ({
   mode,
   date,
+  prevDate,
+  isFirstColumn,
   dayN
-}: Pick<DayColumnProps, 'mode' | 'date' | 'dayN'>) => {
+}: Pick<DayColumnProps, 'mode' | 'date' | 'prevDate' | 'isFirstColumn' | 'dayN'>) => {
   if (mode === DaySelectMode.Dates && date) {
+    const showMonth = isFirstColumn || (prevDate && date.getMonth() !== prevDate.getMonth())
     return (
       <>
-        <div className="font-sans">
-          {date.toLocaleString('en-US', { month: 'numeric', day: 'numeric' })}
+        <div className='flex flex-row items-center sm:text-base font-medium gap-2'>
+          {showMonth && (
+            <div className="">
+              {date.toLocaleString('en-US', { month: 'short' })}
+            </div>
+          )}
+          {date.getDate()}
         </div>
         <div className="opacity-30 uppercase font-sans tracking-widest font-semibold">
           {date.toLocaleString('en-US', { weekday: 'short' })}

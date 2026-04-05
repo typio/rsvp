@@ -75,7 +75,8 @@ const App = () => {
                           userSchedule: resJSON.user_schedule,
                           othersSchedule: resJSON.others_schedule,
                           others: resJSON.others_names,
-                          absentReasons: resJSON.absent_reasons
+                          absentReasons: resJSON.absent_reasons,
+                          timezone: resJSON.timezone
                         }
 
                         const isOwner: boolean = resJSON.is_owner

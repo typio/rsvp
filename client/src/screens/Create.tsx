@@ -226,7 +226,8 @@ const Create = () => {
     userSchedule: storedCreateState?.userSchedule ?? [],
     othersSchedule: [],
     others: [],
-    absentReasons: [null]
+    absentReasons: [null],
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
   })
 
   useEffect(() => {
