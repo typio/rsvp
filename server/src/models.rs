@@ -10,10 +10,16 @@ use tide_websockets::WebSocketConnection;
 type RoomUID = String;
 type UserUID = String;
 
+pub struct Bucket {
+    pub tokens: f64,
+    pub last: std::time::Instant,
+}
+
 #[derive(Clone)]
 pub struct State {
     pub db_pool: Pool<MySql>,
     pub rooms: Arc<Mutex<HashMap<RoomUID, HashMap<UserUID, WebSocketConnection>>>>,
+    pub limiter: Arc<Mutex<HashMap<String, Bucket>>>,
 }
 
 impl State {
@@ -21,6 +27,7 @@ impl State {
         Self {
             db_pool,
             rooms: Default::default(),
+            limiter: Default::default(),
         }
     }
 }
@@ -92,7 +99,7 @@ pub enum ScheduleDates {
 #[derive(Serialize, Deserialize)]
 pub struct CreateRoomReq {
     pub event_name: String,
-    pub schedule_type: u8, // NOTE: I want to use an enum but sqlx nor TS+serde work well
+    pub schedule_type: u8, // enum breaks sqlx + serde
     pub dates: ScheduleDates,
     pub slot_length: u8,
     pub schedule: Vec<Vec<bool>>,

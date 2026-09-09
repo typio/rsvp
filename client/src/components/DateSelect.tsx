@@ -29,13 +29,13 @@ export enum DaySelectMode {
 export type WeekDayNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7
 export type SelectedDates =
   | {
-    mode: DaySelectMode.Dates
-    dates: string[]
-  }
+      mode: DaySelectMode.Dates
+      dates: string[]
+    }
   | {
-    mode: DaySelectMode.DaysOfWeek
-    dates: WeekDayNumber[]
-  }
+      mode: DaySelectMode.DaysOfWeek
+      dates: WeekDayNumber[]
+    }
 
 export const DAYS_OF_WEEK = {
   three_letter_abbrv: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -84,19 +84,19 @@ export const DateSelect = ({
               {mode === DaySelectMode.Dates ? (
                 <>
                   <FontAwesomeIcon icon={faCalendarDays} />
-                  Select Dates
+                  Dates
                 </>
               ) : (
                 <>
                   <FontAwesomeIcon icon={faCalendarWeek} />
-                  Select Days of Week
+                  Days of Week
                 </>
               )}
             </div>
           </Button>
         </PopoverTrigger>
         <PopoverContent
-          className={`border-2 ${mode === DaySelectMode.DaysOfWeek ? 'max-w-[420px] w-[calc(100vw-2rem)]' : 'w-[calc(100vw-2rem)] max-w-[calc(50px*7+2rem)]'} ${showError ? 'border-destructive' : ''}`}
+          className={`border-2 z-30 ${mode === DaySelectMode.DaysOfWeek ? 'max-w-105 w-[calc(100vw-2rem)]' : 'w-[calc(100vw-2rem)] max-w-[calc(50px*7+2rem)]'} ${showError ? 'border-destructive' : ''}`}
         >
           {mode === DaySelectMode.DaysOfWeek ? (
             <DaysOfWeekCalendar dates={dates} setDates={setDates} />
@@ -146,7 +146,10 @@ const DaysOfWeekCalendar = ({
   }
 
   return (
-    <div className="grid grid-cols-7 gap-1.5 w-full" style={{ touchAction: 'none' }}>
+    <div
+      className="grid grid-cols-7 gap-1.5 w-full"
+      style={{ touchAction: 'none' }}
+    >
       {DAYS_OF_WEEK.three_letter_abbrv.map((day, _i) => {
         const i = _i as WeekDayNumber
 
@@ -156,27 +159,36 @@ const DaysOfWeekCalendar = ({
             : false
 
         return (
-          <div
+          <button
+            type="button"
             key={i}
-            className="select-none h-28 "
-            onPointerDown={(e) => {
-              (e.target as Element).releasePointerCapture(e.pointerId)
+            aria-pressed={isSelected}
+            aria-label={DAYS_OF_WEEK.full[_i]}
+            className="select-none h-28 w-full"
+            onPointerDown={e => {
+              ;(e.target as Element).releasePointerCapture(e.pointerId)
               setIsSelecting(!isSelected)
               handleDaySelect(i, !isSelected)
             }}
             onPointerEnter={() => {
               if (isSelecting !== null) handleDaySelect(i, isSelecting)
             }}
+            onKeyDown={e => {
+              if (e.key !== ' ' && e.key !== 'Enter') return
+              e.preventDefault()
+              handleDaySelect(i, !isSelected)
+            }}
           >
             <div
-              className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm duration-200 border-2 ${isSelected
-                ? 'bg-secondary/80 border-secondary text-white shadow-lg'
-                : 'bg-white/5 border-white/5 text-white/70'
-                }`}
+              className={`h-full w-full flex items-center justify-center rounded-lg font-medium text-sm duration-200 border-2 ${
+                isSelected
+                  ? 'bg-secondary/80 border-secondary text-white shadow-lg'
+                  : 'bg-white/5 border-white/5 text-white/70'
+              }`}
             >
               {day}
             </div>
-          </div>
+          </button>
         )
       })}
     </div>
@@ -194,8 +206,30 @@ const DatesCalendar = ({
   showError: boolean
   setShowError: React.Dispatch<boolean>
 }) => {
+  const maxSelectableDate = new Date()
+  maxSelectableDate.setMonth(maxSelectableDate.getMonth() + 6)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
   const [currentDate, setCurrentDate] = useState(new Date())
-  // const [selectedDates, setSelectedDates] = useState<Date[]>([])
+
+  const monthStart = new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth(),
+    1
+  )
+  const monthEnd = new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth() + 1,
+    0
+  )
+  const selected =
+    dates.mode === DaySelectMode.Dates ? dates.dates.map(d => new Date(d)) : []
+  const before = selected.filter(d => d < monthStart).length
+  const after = selected.filter(d => d > monthEnd).length
+  const hint = (n: number) => `+${n} ${n === 1 ? 'day' : 'days'}`
+  const atFirstMonth =
+    monthStart <= new Date(today.getFullYear(), today.getMonth(), 1)
 
   const errorTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -207,8 +241,7 @@ const DatesCalendar = ({
     }
   }, [])
 
-  // null when not selecting, boolean shows if selection is additive or not
-  const [isSelecting, setIsSelecting] = useState<null | boolean>(null)
+  const [isSelecting, setIsSelecting] = useState<null | boolean>(null) // null: idle, bool: additive
 
   useEffect(() => {
     const handleMouseUp = () => setIsSelecting(null)
@@ -230,6 +263,11 @@ const DatesCalendar = ({
   }
 
   const handleDateClick = (date: Date, additive: boolean | null) => {
+    if (additive && date > maxSelectableDate) {
+      toast.error("Can't select dates more than 6 months out")
+      return
+    }
+
     const dateString = date.toDateString()
     const isSelected =
       dates.mode === DaySelectMode.Dates &&
@@ -245,19 +283,17 @@ const DatesCalendar = ({
     if (newDates.length > 14) {
       setShowError(true)
 
-      // Clear any existing timeout
       if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current)
       else {
         toast.error('Selecting 2+ weeks requires Pro tier!', {
           description: 'Pro subscriptions are not available.',
           action: {
             label: 'Ok.',
-            onClick: () => { }
+            onClick: () => {}
           }
         })
       }
 
-      // Set new timeout and store the reference
       errorTimeoutRef.current = setTimeout(() => {
         setShowError(false)
         errorTimeoutRef.current = null
@@ -336,12 +372,26 @@ const DatesCalendar = ({
       const date = new Date(year, month, day)
       const isSelected = isDateSelected(date)
       const roundedCorners = getRoundedCorners(date)
+      const disabled = date > maxSelectableDate || date < today
 
       days.push(
-        <div
+        <button
+          type="button"
           key={day}
+          disabled={disabled}
+          aria-pressed={isSelected}
+          aria-label={date.toLocaleDateString('en-US', {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric'
+          })}
+          onKeyDown={e => {
+            if (e.key !== ' ' && e.key !== 'Enter') return
+            e.preventDefault()
+            handleDateClick(date, !isSelected)
+          }}
           className={`aspect-square flex justify-center items-center select-none text-sm sm:text-base font-medium
-          ${isSameDay(date, new Date()) ? 'text-primary' : ''} 
+          ${isSameDay(date, new Date()) ? 'text-primary' : ''}
           ${isSelected ? `bg-secondary ${roundedCorners} z-10` : ' bg-background text-muted-foreground active:text-muted-foreground xl:active:text-white '}
           ${day === 1 ? 'rounded-tl-md' : ''}
           ${day === daysInMonth ? 'rounded-br-md' : ''}
@@ -349,21 +399,23 @@ const DatesCalendar = ({
           ${day === lastSun ? 'rounded-bl-md' : ''}
           ${day === firstSun ? 'rounded-tl-md' : ''}
           ${day === lastSat ? 'rounded-br-md' : ''}
-          cursor-pointer`}
+          ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
           onPointerDown={e => {
+            if (disabled) return
             const target = e.target as Element
             target.releasePointerCapture(e.pointerId)
             setIsSelecting(!isSelected)
             handleDateClick(date, !isSelected)
           }}
           onPointerEnter={() => {
+            if (disabled) return
             if (isSelecting !== null) {
               handleDateClick(date, isSelecting)
             }
           }}
         >
           {day}
-        </div>
+        </button>
       )
     }
     return days
@@ -377,22 +429,49 @@ const DatesCalendar = ({
 
   return (
     <div
-      className={`flex flex-col ${showError ? 'wiggle' : ''}`}
+      className={`z-30 flex flex-col ${showError ? 'wiggle' : ''}`}
       style={{ touchAction: 'none' }}
     >
-      <div className="flex flex-row justify-between items-center mb-4">
-        <Button variant="ghost" className='w-[50px]' onClick={() => changeMonth(-1)}>
-          <FontAwesomeIcon icon={faArrowLeft} />
-        </Button>
-        <span className="text-sm sm:text-base">
-          {currentDate.toLocaleString('default', {
-            month: 'long',
-            year: 'numeric'
-          })}
-        </span>
-        <Button variant="ghost" className='w-[50px]' onClick={() => changeMonth(1)}>
-          <FontAwesomeIcon icon={faArrowRight} />
-        </Button>
+      <div className="flex flex-row justify-between items-start mb-4">
+        <div className="flex flex-col gap-y-2">
+          <Button
+            variant="ghost"
+            className={`w-12.5 h-11 ${atFirstMonth ? 'opacity-30' : ''}`}
+            disabled={atFirstMonth}
+            aria-label="Previous month"
+            onClick={() => changeMonth(-1)}
+          >
+            <FontAwesomeIcon icon={faArrowLeft} />
+          </Button>
+          <span
+            className={`text-xs text-muted-foreground text-center ${before === 0 ? 'invisible' : ''}`}
+          >
+            {hint(before)}
+          </span>
+        </div>
+        <div className="h-11 flex items-center">
+          <span className="text-sm sm:text-base ">
+            {currentDate.toLocaleString('default', {
+              month: 'long',
+              year: 'numeric'
+            })}
+          </span>
+        </div>
+        <div className="flex flex-col gap-y-2">
+          <Button
+            variant="ghost"
+            className="w-12.5 h-11"
+            aria-label="Next month"
+            onClick={() => changeMonth(1)}
+          >
+            <FontAwesomeIcon icon={faArrowRight} />
+          </Button>
+          <span
+            className={`text-xs text-muted-foreground text-center ${after === 0 ? 'invisible' : ''}`}
+          >
+            {hint(after)}
+          </span>
+        </div>
       </div>
       <div className="grid grid-cols-7">
         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (

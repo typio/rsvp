@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 use crate::models::{Room, State, UserOfRoom, WSMessage};
-use crate::room::process_room_data;
+use crate::room::{fetch_room, room_view};
 use crate::utils::get_user_uid_from_cookie;
 
 use async_std::prelude::*;
@@ -23,7 +23,6 @@ pub async fn connect_websocket(
 
     let state = req.state().clone();
 
-    // Add connection
     state
         .rooms
         .lock()
@@ -44,7 +43,6 @@ pub async fn connect_websocket(
                     println!("Client failed to respond to ping, closing connection.");
                     break;
                 }
-                // if let Err(_) = wsc.send(tide_websockets::Message::Ping(vec![])).await {
                 if let Err(_) = wsc.send(tide_websockets::Message::Text("ping".to_string())).await {
                     break;
                 }
@@ -56,16 +54,13 @@ pub async fn connect_websocket(
                             break;
                         }
                         if text.trim() == "ping" {
-                            // Handle text-based ping
                             if let Err(_) = wsc.send(tide_websockets::Message::Text("pong".to_string())).await {
                                 break;
                             }
                             last_pong = Instant::now();
                         } else if text.trim() == "pong" {
-                            // Handle text-based pong
                             last_pong = Instant::now();
                         } else {
-                            // Handle regular text messages
                             let message: WSMessage = match serde_json::from_str(&text) {
                                 Ok(msg) => msg,
                                 Err(e) => {
@@ -73,7 +68,8 @@ pub async fn connect_websocket(
                                     continue;
                                 }
                             };
-                            if let Err(e) = handle_websocket_message(
+                            // boxed error isn't Send: drop it before the await
+                            let full = match handle_websocket_message(
                                 req.state().clone(),
                                 room_uid.to_string(),
                                 user_uid.clone(),
@@ -81,7 +77,22 @@ pub async fn connect_websocket(
                             )
                             .await
                             {
-                                println!("Error handling message: {:?}", e);
+                                Ok(()) => false,
+                                Err(e) => {
+                                    let full = e.is::<RoomFull>();
+                                    if !full {
+                                        println!("Error handling message: {:?}", e);
+                                    }
+                                    full
+                                }
+                            };
+                            if full {
+                                let _ = wsc
+                                    .send_json(&json!({
+                                        "messageType": "roomFull",
+                                        "payload": { "max": MAX_PARTICIPANTS }
+                                    }))
+                                    .await;
                             }
                         }
                     },
@@ -95,7 +106,6 @@ pub async fn connect_websocket(
                         last_pong = Instant::now();
                     },
                     Some(Ok(tide_websockets::Message::Close(_))) => {
-                        // println!("WebSocket closed.");
                         break;
                     },
                     Some(Err(e)) => {
@@ -112,7 +122,6 @@ pub async fn connect_websocket(
         }
     }
 
-    // Remove connection
     {
         let mut rooms = req.state().rooms.lock().await;
         if let Some(room) = rooms.get_mut(room_uid) {
@@ -125,6 +134,29 @@ pub async fn connect_websocket(
 
     Ok(())
 }
+
+pub const MAX_PARTICIPANTS: usize = 32;
+
+// snapshot: the map lock is never held across a send
+async fn room_connections(state: &State, room_uid: &str) -> Vec<(String, WebSocketConnection)> {
+    state
+        .rooms
+        .lock()
+        .await
+        .get(room_uid)
+        .map(|room| room.iter().map(|(u, c)| (u.clone(), c.clone())).collect())
+        .unwrap_or_default()
+}
+
+// sent back to the sender as roomFull
+#[derive(Debug)]
+pub struct RoomFull;
+impl std::fmt::Display for RoomFull {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "room is full ({} participants)", MAX_PARTICIPANTS)
+    }
+}
+impl std::error::Error for RoomFull {}
 
 pub async fn handle_websocket_message(
     state: State,
@@ -142,7 +174,6 @@ pub async fn handle_websocket_message(
 
             let mut user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
 
-            // If user isn't in room add them
             let user_exists: bool = match sqlx::query(
                 r#"
                 SELECT * FROM users_of_rooms
@@ -188,7 +219,6 @@ pub async fn handle_websocket_message(
                 .await?;
             }
 
-            // get room from DB
             let room: Room = sqlx::query_as(
                 r#"
                     SELECT uid, event_name, schedule_type,
@@ -211,7 +241,12 @@ pub async fn handle_websocket_message(
             let mut participants: Vec<String> = serde_json::from_str(&room.participants)?;
             let mut schedule: Vec<Vec<Vec<usize>>> = serde_json::from_str(&room.schedule)?;
 
-            // Find or add user's participant index
+            // over cap: roll back the join above
+            if !participants.contains(&user_uid) && participants.len() >= MAX_PARTICIPANTS {
+                transaction.rollback().await?;
+                return Err(Box::new(RoomFull));
+            }
+
             let user_p_index = match participants.iter().position(|p| p == &user_uid) {
                 Some(idx) => idx,
                 None => {
@@ -220,7 +255,6 @@ pub async fn handle_websocket_message(
                 }
             };
 
-            // Remove user's index from all cells, re-add where selected
             for (i, row) in schedule.iter_mut().enumerate() {
                 for (j, slot) in row.iter_mut().enumerate() {
                     slot.retain(|&idx| idx != user_p_index);
@@ -230,7 +264,6 @@ pub async fn handle_websocket_message(
                 }
             }
 
-            // save schedule and participants
             let _ = sqlx::query!(
                 r#"
                     UPDATE rooms
@@ -246,9 +279,12 @@ pub async fn handle_websocket_message(
 
             transaction.commit().await?;
 
-            if let Some(room) = state.rooms.lock().await.get(&room_uid) {
+{
+                let room = room_connections(&state, &room_uid).await;
+                let Ok(snap) = fetch_room(&state, &room_uid).await else { return Ok(()) };
                 for (wsc_user_uid, wsc) in room.iter() {
-                    if let Ok(room_data) = process_room_data(&state, &room_uid, &wsc_user_uid).await {
+                    {
+                        let room_data = room_view(&snap, wsc_user_uid);
                         let _ = wsc
                             .send_json(&json!({
                             "messageType": "editSchedule",
@@ -295,7 +331,8 @@ pub async fn handle_websocket_message(
                 .execute(&state.db_pool)
                 .await?;
 
-                if let Some(room) = state.rooms.lock().await.get(&room_uid) {
+                {
+                let room = room_connections(&state, &room_uid).await;
                     for (this_user_uid, user_wsc) in room.iter() {
                         if *this_user_uid != user_uid {
                             let _ = user_wsc
@@ -353,7 +390,8 @@ pub async fn handle_websocket_message(
             .fetch_all(&state.db_pool)
             .await?;
 
-            if let Some(room) = state.rooms.lock().await.get(&room_uid) {
+            {
+                let room = room_connections(&state, &room_uid).await;
                 for (this_user_uid, user_wsc) in room.iter() {
                     if *this_user_uid != user_uid {
                         let others_names: Vec<String> = users_of_rooms.clone().into_iter().fold(
@@ -398,7 +436,6 @@ pub async fn handle_websocket_message(
                 return Err("Owner can't be absent.".into());
             }
 
-            // TODO: OR get default name!
             let user_name: String = serde_json::from_value(msg.payload["user_name"].clone())?;
             let absent_reason: Option<String> =
                 serde_json::from_value(msg.payload["absent_reason"].clone())?;
@@ -407,7 +444,6 @@ pub async fn handle_websocket_message(
 
             let absent_reason: String = absent_reason.unwrap_or("".to_string());
 
-            // Set absent, and if user isn't in room add them
             let _ = sqlx::query!(
                 r#"
                     INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)
@@ -426,9 +462,12 @@ pub async fn handle_websocket_message(
             .execute(&state.db_pool)
             .await;
 
-            if let Some(room) = state.rooms.lock().await.get(&room_uid) {
+{
+                let room = room_connections(&state, &room_uid).await;
+                let Ok(snap) = fetch_room(&state, &room_uid).await else { return Ok(()) };
                 for (this_user_uid, user_wsc) in room.iter() {
-                    if let Ok(room_data) = process_room_data(&state, &room_uid, &this_user_uid).await {
+                    {
+                        let room_data = room_view(&snap, this_user_uid);
                         let msg_type = if *this_user_uid == user_uid {
                             "userSetAbsentReason"
                         } else {
@@ -450,7 +489,6 @@ pub async fn handle_websocket_message(
             }
         }
         "removeParticipant" => {
-            // Two modes: owner removes another (others_index), or non-owner removes self (leave: true)
             #[derive(Deserialize)]
             struct RemovePayload {
                 others_index: Option<usize>,
@@ -499,7 +537,6 @@ pub async fn handle_websocket_message(
             let mut participants: Vec<String> = serde_json::from_str(&room.participants)?;
             let mut schedule: Vec<Vec<Vec<usize>>> = serde_json::from_str(&room.schedule)?;
 
-            // Determine target participant index
             let target_p_index = if is_self_leave {
                 participants.iter().position(|p| p == &user_uid)
                     .ok_or("User not found in participants")?
@@ -525,7 +562,6 @@ pub async fn handle_websocket_message(
             let target_uid = participants.get(target_p_index)
                 .ok_or("Participant index out of bounds")?.clone();
 
-            // Remove target's index from all schedule cells and reindex
             for row in schedule.iter_mut() {
                 for slot in row.iter_mut() {
                     slot.retain(|&idx| idx != target_p_index);
@@ -556,10 +592,10 @@ pub async fn handle_websocket_message(
 
             transaction.commit().await?;
 
-            // Notify the removed user (if removed by owner)
             if !is_self_leave {
-                if let Some(room) = state.rooms.lock().await.get(&room_uid) {
-                    if let Some(target_wsc) = room.get(&target_uid) {
+                {
+                    let room = room_connections(&state, &room_uid).await;
+                    if let Some((_, target_wsc)) = room.iter().find(|(u, _)| *u == target_uid) {
                         let _ = target_wsc
                             .send_json(&json!({ "messageType": "removedFromRoom" }))
                             .await;
@@ -567,11 +603,13 @@ pub async fn handle_websocket_message(
                 }
             }
 
-            // Broadcast updated state to remaining users
-            if let Some(room) = state.rooms.lock().await.get(&room_uid) {
+{
+                let room = room_connections(&state, &room_uid).await;
+                let Ok(snap) = fetch_room(&state, &room_uid).await else { return Ok(()) };
                 for (wsc_user_uid, wsc) in room.iter() {
                     if *wsc_user_uid != target_uid {
-                        if let Ok(room_data) = process_room_data(&state, &room_uid, wsc_user_uid).await {
+                        {
+                            let room_data = room_view(&snap, wsc_user_uid);
                             let _ = wsc
                                 .send_json(&json!({
                                     "messageType": "editSchedule",
@@ -585,6 +623,68 @@ pub async fn handle_websocket_message(
                                 .await;
                         }
                     }
+                }
+            }
+        }
+        "presence" => {
+            // ephemeral relay; sender index translated per receiver in room_view order. unnamed lurkers skipped
+            let row: Option<(String,)> = sqlx::query_as(
+                r#"SELECT CAST(participants AS CHAR) FROM rooms WHERE uid=?"#,
+            )
+            .bind(&room_uid)
+            .fetch_optional(&state.db_pool)
+            .await?;
+            let Some((participants_json,)) = row else {
+                return Ok(());
+            };
+            let participants: Vec<String> = serde_json::from_str(&participants_json)?;
+
+            let extra_users: Vec<String> = sqlx::query_as::<_, (String,)>(
+                r#"SELECT user_uid FROM users_of_rooms WHERE room_uid=?"#,
+            )
+            .bind(&room_uid)
+            .fetch_all(&state.db_pool)
+            .await?
+            .into_iter()
+            .map(|(uid,)| uid)
+            .filter(|uid| !participants.contains(uid))
+            .collect();
+
+            {
+                let room = room_connections(&state, &room_uid).await;
+                for (receiver_uid, receiver_wsc) in room.iter() {
+                    if *receiver_uid == user_uid {
+                        continue;
+                    }
+                    let others_index = match participants
+                        .iter()
+                        .filter(|p| **p != *receiver_uid)
+                        .position(|p| *p == user_uid)
+                    {
+                        Some(i) => Some(i),
+                        None => extra_users
+                            .iter()
+                            .filter(|u| **u != *receiver_uid)
+                            .position(|u| *u == user_uid)
+                            .map(|i| {
+                                i + participants
+                                    .iter()
+                                    .filter(|p| **p != *receiver_uid)
+                                    .count()
+                            }),
+                    };
+                    let Some(others_index) = others_index else {
+                        continue;
+                    };
+                    let _ = receiver_wsc
+                        .send_json(&json!({
+                            "messageType": "presence",
+                            "payload": {
+                                "othersIndex": others_index,
+                                "data": msg.payload.clone()
+                            }
+                        }))
+                        .await;
                 }
             }
         }

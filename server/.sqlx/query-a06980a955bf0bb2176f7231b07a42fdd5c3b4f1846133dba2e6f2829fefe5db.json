@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                    UPDATE rooms\n                    SET schedule=?, participants=?\n                    WHERE uid=?\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a06980a955bf0bb2176f7231b07a42fdd5c3b4f1846133dba2e6f2829fefe5db"
+}

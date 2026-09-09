@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        INSERT INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)\n        VALUES (?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "e70e8b102d0c81dc9dabb5bb4d37845a564b15f081360e49d1baf44ddcbbaae5"
+}

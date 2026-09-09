@@ -1,5 +1,5 @@
 use crate::models::State;
-use crate::utils::{generate_auth_token, get_user_uid_from_cookie};
+use crate::utils::{allow, generate_auth_token, get_user_uid_from_cookie};
 
 use sqlx::MySql;
 use sqlx::Transaction;
@@ -15,6 +15,11 @@ pub async fn authenticate(req: Request<State>) -> tide::Result {
     let mut response = Response::new(StatusCode::Ok);
 
     if get_user_uid_from_cookie(&req).await == None {
+        if !allow(&req, "auth", 20.0, 5.0).await {
+            return Ok(Response::builder(StatusCode::TooManyRequests)
+                .header("Retry-After", "5")
+                .build());
+        }
         let mut transaction: Transaction<'_, MySql> = req.state().db_pool.begin().await?;
 
         match signup(&mut transaction).await {

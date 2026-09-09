@@ -3,13 +3,15 @@ import ReactDOM from 'react-dom/client'
 import { Toaster } from '@/components/ui/sonner'
 
 import '@fontsource-variable/lexend'
+import '@fontsource-variable/gabarito'
+import '@fontsource-variable/caveat'
 
 import App from './App.tsx'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <div className="min-h-[100vh] flex justify-center py-4 sm:py-8 px-2 sm:px-8 focus:outline-none focus:ring focus:ring-primary">
+    <div className="min-h-screen flex justify-center focus:outline-hidden focus:ring-3 focus:ring-primary">
       <App />
     </div>
     <Toaster />

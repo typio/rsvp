@@ -1,12 +1,52 @@
-use crate::models::State;
+use crate::models::{Bucket, State};
 
 use num_bigint::BigUint;
 use sha2::{Digest, Sha256};
 use std::ops::Div;
 use std::ops::Rem;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use tide::Request;
 use uuid::Uuid;
+
+pub fn client_ip(req: &Request<State>) -> String {
+    let header = |name: &str| {
+        req.header(name)
+            .and_then(|h| h.get(0))
+            .map(|v| v.as_str().split(',').next().unwrap_or("").trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+    header("cf-connecting-ip")
+        .or_else(|| header("x-forwarded-for"))
+        .unwrap_or_else(|| {
+            // strip the port: it differs per connection
+            req.peer_addr()
+                .and_then(|p| p.parse::<std::net::SocketAddr>().ok())
+                .map(|a| a.ip().to_string())
+                .unwrap_or_else(|| "?".to_string())
+        })
+}
+
+// token bucket per ip: `burst` at once, then one per `refill_secs`
+pub async fn allow(req: &Request<State>, scope: &str, burst: f64, refill_secs: f64) -> bool {
+    if std::env::var("RSVP_NO_RATE_LIMIT").is_ok() {
+        return true;
+    }
+    let key = format!("{}:{}", scope, client_ip(req));
+    let mut map = req.state().limiter.lock().await;
+    let now = Instant::now();
+    if map.len() > 5_000 {
+        map.retain(|_, b| now.duration_since(b.last).as_secs() < 3600);
+    }
+    let b = map.entry(key).or_insert(Bucket { tokens: burst, last: now });
+    b.tokens = (b.tokens + now.duration_since(b.last).as_secs_f64() / refill_secs).min(burst);
+    b.last = now;
+    if b.tokens >= 1.0 {
+        b.tokens -= 1.0;
+        true
+    } else {
+        false
+    }
+}
 
 pub fn generate_auth_token() -> String {
     let timestamp = SystemTime::now()

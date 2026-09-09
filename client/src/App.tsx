@@ -1,20 +1,25 @@
 import {
   createBrowserRouter,
+  isRouteErrorResponse,
   Outlet,
   redirect,
   RouterProvider,
   useNavigate,
   useRouteError
 } from 'react-router-dom'
-import Header from './components/Header'
-import Footer from './components/Footer'
-import Create from './screens/Create'
-import Join, { JoinRouteData } from './screens/Join'
-import About from './screens/About'
+import Room, { RoomRouteData } from './screens/Room'
+import { addDays, startOfDay } from 'date-fns'
 import { h24ToTimeRange, API_URL } from './utils'
+import { parseFake, withFake } from './utils/devFake'
 import { WebSocketProvider } from './contexts/WebSocketContext'
-import { DaySelectMode } from './components/DateSelect'
+import { DaySelectMode, SelectedDates } from './components/DateSelect'
 import { Button } from './components/ui/button'
+
+import { lazy, Suspense } from 'react'
+
+const StateHarness = import.meta.env.DEV
+  ? lazy(() => import('./screens/StateHarness'))
+  : () => null
 
 const App = () => {
   const router = createBrowserRouter([
@@ -22,86 +27,126 @@ const App = () => {
       element: <Layout />,
       children: [
         {
-          path: '/',
-          element: <Create />
-        },
-        {
-          path: '/:room_uid',
-          element: <Join />,
+          path: '/:room_uid?',
+          element: <Room />,
 
-          loader: ({ params }): Promise<JoinRouteData> | Response => {
-            const roomUid = params.room_uid
-
-            if (roomUid && roomUid !== roomUid.toUpperCase()) {
-              return redirect(`/${roomUid.toUpperCase()}`)
-            }
-
-            // NOTE: Slight issue where if Create successfully creates a room but this fails to load it, then that room is essentially lost and wasting resources
-            return new Promise((resolve, reject) => {
-              if (roomUid === undefined) {
-                reject(`Missing room id.`)
-                return
+          loader: async ({
+            params,
+            request
+          }): Promise<RoomRouteData | Response> => {
+            if (params.room_uid === undefined) {
+              const storedDraftRoomState = ((storedStr: string | null) =>
+                typeof storedStr === 'string' ? JSON.parse(storedStr) : null)(
+                localStorage.getItem('storedDraftRoomState')
+              )
+              return {
+                mode: 'draft',
+                scheduleData: {
+                  userName: '',
+                  eventName: storedDraftRoomState?.eventName ?? 'My Event',
+                  dates: ((stored?: SelectedDates): SelectedDates => {
+                    const today = startOfDay(new Date())
+                    const nextWeek = Array.from({ length: 7 }).map((_, i) =>
+                      addDays(today, i).toDateString()
+                    )
+                    if (!stored) return { mode: DaySelectMode.Dates, dates: nextWeek }
+                    if (stored.mode !== DaySelectMode.Dates) return stored
+                    const live = stored.dates.filter(d => new Date(d) >= today)
+                    return {
+                      mode: DaySelectMode.Dates,
+                      dates: live.length ? live : nextWeek
+                    }
+                  })(storedDraftRoomState?.dates),
+                  timeRange: storedDraftRoomState?.timeRange ?? {
+                    from: { hour: '9', isAM: true },
+                    to: { hour: '5', isAM: false }
+                  },
+                  slotLength: storedDraftRoomState?.slotLength ?? 30,
+                  userSchedule: storedDraftRoomState?.userSchedule ?? [],
+                  othersSchedule: [],
+                  others: [],
+                  absentReasons: [null],
+                  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+                }
               }
+            } else if (!/^[a-zA-Z0-9]{4}$/.test(params?.room_uid)) {
+              throw new Response(null, { status: 404 })
+            } else {
+              const roomUid = params.room_uid
+              if (roomUid !== roomUid.toUpperCase())
+                return redirect(`/${roomUid.toUpperCase()}`)
 
-              fetch(`${API_URL}/api/auth`, {
+              const auth_res = await fetch(`${API_URL}/api/auth`, {
                 method: 'POST',
                 credentials: 'include'
               })
-                .then(res => {
-                  if (res.ok) {
-                    fetch(`${API_URL}/api/rooms/${roomUid}`, {
-                      method: 'GET',
-                      credentials: 'include'
-                    }).then(res => {
-                      if (res.status === 404)
-                        reject(
-                          `This room does not exist. It was probably deleted by the owner.`
-                        )
-                      if (res.status !== 200)
-                        reject(`${res.status}: ${res.statusText}`)
-                      res.json().then(resJSON => {
-                        const scheduleData = {
-                          eventName: resJSON.event_name,
-                          userName: resJSON.user_name,
-                          dates: {
-                            mode: resJSON.schedule_type,
-                            dates:
-                              resJSON.schedule_type === DaySelectMode.Dates
-                                ? resJSON.dates
-                                : resJSON.days_of_week
-                          },
-                          timeRange: h24ToTimeRange(resJSON.time_range),
-                          slotLength: resJSON.slot_length,
-                          userSchedule: resJSON.user_schedule,
-                          othersSchedule: resJSON.others_schedule,
-                          others: resJSON.others_names,
-                          absentReasons: resJSON.absent_reasons,
-                          timezone: resJSON.timezone
-                        }
 
-                        const isOwner: boolean = resJSON.is_owner
-
-                        const joinData = {
-                          scheduleData,
-                          isOwner,
-                          roomUid
-                        }
-
-                        resolve(joinData)
-                      })
-                    })
-                  } else {
-                    reject('Not authenticated.')
+              if (auth_res.ok) {
+                const room_res = await fetch(
+                  `${API_URL}/api/rooms/${roomUid}`,
+                  {
+                    method: 'GET',
+                    credentials: 'include'
                   }
-                })
-                .catch(e => reject(`Couldn't fetch: ${e}`))
-            })
+                )
+
+                if (room_res.status === 404)
+                  throw new Response(null, { status: 410 })
+                if (room_res.status !== 200)
+                  throw new Response(null, { status: 500 })
+
+                const roomJSON = await room_res.json()
+
+                const scheduleData = {
+                  eventName: roomJSON.event_name,
+                  userName: roomJSON.user_name,
+                  dates: {
+                    mode: roomJSON.schedule_type,
+                    dates:
+                      roomJSON.schedule_type === DaySelectMode.Dates
+                        ? roomJSON.dates
+                        : roomJSON.days_of_week
+                  },
+                  timeRange: h24ToTimeRange(roomJSON.time_range),
+                  slotLength: roomJSON.slot_length,
+                  userSchedule: roomJSON.user_schedule,
+                  othersSchedule: roomJSON.others_schedule,
+                  others: roomJSON.others_names,
+                  absentReasons: roomJSON.absent_reasons,
+                  timezone: roomJSON.timezone
+                }
+
+                const isOwner: boolean = roomJSON.is_owner
+                const fake = import.meta.env.DEV ? parseFake(request.url) : null
+
+                return {
+                  mode: 'live',
+                  scheduleData:
+                    import.meta.env.DEV && fake
+                      ? withFake(scheduleData, fake)
+                      : scheduleData,
+                  isOwner: fake?.owner ?? isOwner,
+                  roomUid,
+                  fake
+                }
+              } else {
+                throw new Response(null, { status: 500 })
+              }
+            }
           }
         },
-        {
-          path: '/about',
-          element: <About />
-        }
+        ...(import.meta.env.DEV
+          ? [
+              {
+                path: '/dev/states',
+                element: (
+                  <Suspense fallback={<div>Loading states...</div>}>
+                    <StateHarness />
+                  </Suspense>
+                )
+              }
+            ]
+          : [])
       ],
 
       errorElement: <ErrorBoundary />
@@ -113,7 +158,7 @@ const App = () => {
       <RouterProvider
         router={router}
         fallbackElement={
-          <div className="flex flex-row h-[100vh] justify-center items-center">
+          <div className="flex flex-row h-screen justify-center items-center">
             <svg className="w-7 h-7 animate-spin" viewBox="0 0 10 10">
               <circle
                 cx={5}
@@ -141,37 +186,44 @@ const App = () => {
 }
 
 const ErrorBoundary = () => {
-  let rawError: any = useRouteError()
+  let err: any = useRouteError()
   const navigate = useNavigate()
 
-  const is404 = rawError?.status === 404
-  const isRoomGone = typeof rawError === 'string' && rawError.includes('does not exist')
+  const is404 = err?.status === 404
+  const isRoomGone = err?.status === 410
 
   return (
-    <div className="flex flex-col gap-6 flex-grow justify-center items-center max-w-sm mx-auto text-center">
-      <span className="text-5xl font-bold text-primary">
+    <div className="flex flex-col gap-6 grow justify-center items-center max-w-sm mx-auto text-center">
+      <span className="text-6xl lg:text-8xl 2xl:text-9xl font-bold text-primary font-display">
         {is404 ? '404' : isRoomGone ? 'Gone' : 'Oops'}
       </span>
       <p className="text-muted-foreground">
-        {is404
-          ? "This page doesn't exist."
-          : isRoomGone
-            ? 'This room was deleted or expired.'
-            : rawError?.toString?.() || 'Something went wrong.'}
+        {isRouteErrorResponse(err)
+          ? is404
+            ? "This page doesn't exist."
+            : 'This room was deleted or has expired.'
+          : err instanceof Error
+            ? err.message
+            : 'Something went wrong.'}
       </p>
-      <Button onClick={() => navigate('/')} className="mt-2">
+      <Button
+        onClick={() => navigate('/')}
+        className="mt-2 text-foreground bg-card"
+      >
         Create a new room
       </Button>
     </div>
   )
 }
 
-const Layout = () => (
-  <div className="flex-1 grid grid-rows-[auto_1fr_auto] gap-y-8">
-    <Header />
-    <Outlet />
-    <Footer />
-  </div>
-)
+const Layout = () => {
+  return (
+    <div className="min-h-screen flex flex-col w-full">
+      <div className={'flex-1 w-full overflow-x-clip'}>
+        <Outlet />
+      </div>
+    </div>
+  )
+}
 
 export default App

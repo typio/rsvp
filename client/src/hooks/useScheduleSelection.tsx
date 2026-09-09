@@ -1,7 +1,11 @@
-import { Selection } from '@/components/Schedule'
+import { Selection, SelectionRange } from '@/components/Schedule'
 import { ScheduleData } from '@/types'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
+
+const EDGE_ZONE = 28
+const EDGE_SPEED = 10
+const EDGE_PAD = 16
 
 export type ScheduleSelectionContextType = {
   currentSelection: Selection
@@ -13,25 +17,35 @@ export type ScheduleSelectionContextType = {
   ) => void
   handleMouseMoveSchedule: (event: React.MouseEvent<HTMLDivElement>) => void
   applySelection: (selection: Selection) => void
+  toggleCell: (dateIndex: number, timeIndex: number) => void
+  setKeyboardRange: (range: SelectionRange | null, additive: boolean) => void
+  commitKeyboardRange: () => void
 }
 
 export const useScheduleSelection = (
   initialData: ScheduleData,
   editSchedule: (newSchedule: ScheduleData) => void,
   setHoveredSlotUsers: (arg0: boolean[] | null) => void,
-  isCreate: boolean,
-  slotsPerColumn: number
+  isDraftRoom: boolean,
+  onDragChange?: (drag: Selection | null) => void
 ): ScheduleSelectionContextType => {
   const [currentSelection, setCurrentSelection] = useState<Selection>({
     range: null,
     additive: true
   })
 
+  useEffect(() => {
+    onDragChange?.(currentSelection.range ? currentSelection : null)
+  }, [currentSelection])
+
   const [isMouseDown, setIsMouseDown] = useState(false)
 
   useEffect(() => {
     const handleMouseUp = () => {
       setIsMouseDown(false)
+      isMouseDownRef.current = false
+      cancelAnimationFrame(edgeRaf.current)
+      edgeRaf.current = 0
       applySelection(currentSelection)
       setCurrentSelection({
         range: null,
@@ -47,40 +61,33 @@ export const useScheduleSelection = (
     }
   }, [currentSelection])
 
-  const handleMouseMoveSchedule = (event: React.MouseEvent<HTMLDivElement>) => {
-    const scheduleEl = document.getElementById('slot-parent')
-    if (!scheduleEl) return
+  const isMouseDownRef = useRef(false)
+  isMouseDownRef.current = isMouseDown
+  const pointer = useRef<{ x: number; y: number; el: HTMLDivElement } | null>(
+    null
+  )
+  const edgeRaf = useRef(0)
 
-    const scheduleRect = scheduleEl.getBoundingClientRect()
-
-    const slotColumnRect = document
-      .getElementById('slot-column')
-      ?.getBoundingClientRect()
-    if (!slotColumnRect) return
-
-    const scheduleRectLeftPad = 16
-    const scheduleWidth = scheduleEl?.scrollWidth - scheduleRectLeftPad
-
-    const x =
-      event.clientX -
-      scheduleRect.left -
-      scheduleRectLeftPad +
-      scheduleEl?.scrollLeft
-    const y = event.clientY - slotColumnRect.top
-
-    if (x < 0 || y < 0 || x > scheduleWidth || y > slotColumnRect.height) {
+  const updateFromPointer = (
+    scheduleEl: HTMLDivElement,
+    clientX: number,
+    clientY: number
+  ) => {
+    const cellAttr = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest('[data-cell]')
+      ?.getAttribute('data-cell')
+    if (
+      !cellAttr ||
+      !scheduleEl.contains(document.elementFromPoint(clientX, clientY))
+    ) {
       setHoveredSlotUsers(null)
       return
     }
-
-    const slotWidth = scheduleWidth / initialData.dates.dates.length
-    const slotHeight = slotColumnRect.height / slotsPerColumn
-
-    const dateIndex = Math.floor(x / slotWidth)
-    const timeIndex = Math.floor(y / slotHeight)
+    const [dateIndex, timeIndex] = cellAttr.split('-').map(Number)
 
     if (
-      !isCreate &&
+      !isDraftRoom &&
       (dateIndex < 0 ||
         dateIndex >= initialData.dates.dates.length ||
         timeIndex < 0 ||
@@ -90,7 +97,7 @@ export const useScheduleSelection = (
       return
     }
 
-    if (isMouseDown) {
+    if (isMouseDownRef.current) {
       setCurrentSelection(prev => ({
         range: {
           from: prev.range?.from ?? { dateIndex, timeIndex },
@@ -102,7 +109,7 @@ export const useScheduleSelection = (
       return
     }
 
-    if (!isCreate) {
+    if (!isDraftRoom) {
       const userValue = initialData.userSchedule[dateIndex][timeIndex]
       const othersValue = initialData.othersSchedule[dateIndex][timeIndex]
       if (othersValue.length > 0 || userValue) {
@@ -120,20 +127,44 @@ export const useScheduleSelection = (
     }
   }
 
+  const edgeTick = () => {
+    const p = pointer.current
+    if (!p || !isMouseDownRef.current) {
+      edgeRaf.current = 0
+      return
+    }
+    const r = p.el.getBoundingClientRect()
+    const inner = r.left + EDGE_PAD
+    const dx =
+      p.x > r.right - EDGE_ZONE
+        ? ((p.x - (r.right - EDGE_ZONE)) / EDGE_ZONE) * EDGE_SPEED
+        : p.x < inner + EDGE_ZONE
+          ? -((inner + EDGE_ZONE - p.x) / EDGE_ZONE) * EDGE_SPEED
+          : 0
+    if (dx) {
+      p.el.scrollLeft += dx
+      updateFromPointer(p.el, p.x, p.y)
+    }
+    edgeRaf.current = requestAnimationFrame(edgeTick)
+  }
+
+  const handleMouseMoveSchedule = (event: React.MouseEvent<HTMLDivElement>) => {
+    const el = event.currentTarget
+    pointer.current = { x: event.clientX, y: event.clientY, el }
+    updateFromPointer(el, event.clientX, event.clientY)
+    if (isMouseDownRef.current && !edgeRaf.current)
+      edgeRaf.current = requestAnimationFrame(edgeTick)
+  }
+
   const handleMouseDownSlot = (
     dateIndex: number,
     timeIndex: number,
     isSelected: boolean
   ) => {
-    if (initialData.absentReasons[0] !== null) {
-      toast.error("You can't select times while marked absent.", {
-        description:
-          'To select times, please unselect the "I can\'t make it." button.'
-      })
-      return
-    }
+    if (!canEdit()) return
 
     setIsMouseDown(true)
+    isMouseDownRef.current = true
     setCurrentSelection({
       range: {
         from: { dateIndex, timeIndex },
@@ -143,10 +174,34 @@ export const useScheduleSelection = (
     })
   }
 
+  const canEdit = () => {
+    if (initialData.absentReasons[0] === null) return true
+    toast.error("You can't select times while marked absent.", {
+      description:
+        'To select times, please unselect the "I can\'t make it." button.'
+    })
+    return false
+  }
+
+  const toggleCell = (dateIndex: number, timeIndex: number) => {
+    if (!canEdit()) return
+    const cell = { dateIndex, timeIndex }
+    applySelection({
+      range: { from: cell, to: cell },
+      additive: !initialData.userSchedule[dateIndex]?.[timeIndex]
+    })
+  }
+  const setKeyboardRange = (range: SelectionRange | null, additive: boolean) =>
+    setCurrentSelection({ range, additive })
+  const commitKeyboardRange = () => {
+    if (currentSelection.range && canEdit()) applySelection(currentSelection)
+    setCurrentSelection({ range: null, additive: currentSelection.additive })
+  }
+
   const applySelection = (selection: Selection) => {
     if (selection.range == null) return
 
-    let newSchedule = [...initialData.userSchedule]
+    let newSchedule = initialData.userSchedule.map(row => [...row])
 
     const [lesserDI, greaterDI] = [
       selection.range.from.dateIndex,
@@ -172,7 +227,9 @@ export const useScheduleSelection = (
     isMouseDown,
     handleMouseDownSlot,
     handleMouseMoveSchedule,
-    // handleMouseUpSchedule,
-    applySelection
+    applySelection,
+    toggleCell,
+    setKeyboardRange,
+    commitKeyboardRange
   }
 }

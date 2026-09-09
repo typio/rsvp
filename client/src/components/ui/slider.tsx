@@ -20,7 +20,7 @@ const Slider = React.forwardRef<
     <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-background">
       <SliderPrimitive.Range className="absolute h-full bg-background" />
     </SliderPrimitive.Track>
-    <SliderPrimitive.Thumb className="flex items-center justify-center h-6 w-8 rounded border-2 border-primary bg-card transition-colors without-ring  cursor-pointer disabled:pointer-events-none disabled:opacity-50">
+    <SliderPrimitive.Thumb className="flex items-center justify-center h-6 w-12 rounded border-2 border-primary bg-card transition-colors without-ring  cursor-pointer disabled:pointer-events-none disabled:opacity-50">
       <FontAwesomeIcon icon={faGrip} size="xs" className="text-primary" />
     </SliderPrimitive.Thumb>
   </SliderPrimitive.Root>

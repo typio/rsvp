@@ -1,29 +1,86 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@import 'tw-animate-css';
+
+@theme {
+  --font-*: initial;
+  --font-display: Gabarito Variable, sans-serif;
+  --font-sans: Lexend Variable, sans-serif;
+  --font-hand: Caveat Variable, cursive;
+
+  --color-border: oklch(0.346 0.139 259.7);
+  --color-input: oklch(0.233 0.07 252.4);
+  --color-ring: var(--color-primary);
+  --color-background: oklch(0.187 0.052 249.3);
+  --color-foreground: oklch(0.939 0.007 232.7);
+
+  --color-primary: oklch(0.89 0.183 96.1);
+
+  --color-secondary: oklch(0.47 0.17 257.5);
+  --color-secondary-foreground: oklch(0.982 0.009 251.5);
+
+  --color-destructive: oklch(0.571 0.212 27.3);
+  --color-destructive-foreground: oklch(0.911 0.046 18);
+
+  --color-muted: oklch(0.315 0.107 255.9);
+  --color-muted-foreground: oklch(0.488 0.055 258.2);
+
+  --color-popover: oklch(0.218 0.078 257.1);
+  --color-popover-foreground: var(--color-white);
+
+  --color-card: oklch(0.252 0.081 254.3);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+  @keyframes delayedFadeIn {
+    0% {
+      opacity: 0;
+    }
+    50% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+  @keyframes pulse {
+    50% {
+      transform: scale(0.5);
+    }
+  }
+}
 
 @layer base {
   :root {
-    --background: 211 100% 8%;
-    --foreground: 202 20% 92%;
-    --muted: 212 100% 20%;
-    --muted-foreground: 215.9 25% 40%;
-    --popover: 216 100% 11.96%;
-    --popover-foreground: 0 0% 100%;
-    --card: 212 100% 14%;
-    --card-foreground: 0 0% 100%;
-    --border: 216 100% 25%;
-    --input: 211 100% 12%;
-    --primary: 51 100% 50%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 212 100% 36%;
-    --secondary-foreground: 212 100% 98%;
-    --accent: 174 53% 68%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 100% 92%;
-    --ring: 51 100% 50%;
     --radius: 0.75rem;
+
+    --header-h: 96px;
+    --footer-h: 52px;
+
+    @media (min-width: 768px) {
+      --header-h: 116px;
+    }
   }
 }
 
@@ -35,20 +92,24 @@
     min-height: 0;
   }
 
-  *:focus {
-    outline: none;
-  }
-
+  /* keyboard focus only; shadcn primitives opt out via outline-hidden */
   *:focus:not(:focus-visible) {
-    @apply outline-none;
+    outline: none;
   }
 
   *:focus-visible {
-    outline: none;
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
   }
 
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
 }
 
@@ -76,7 +137,6 @@
 
 @keyframes glowAnimation {
   0% {
-    color: white;
     text-shadow:
       0px 0px 0px var(--user-color),
       0px 0px 0px var(--user-color),
@@ -84,7 +144,6 @@
       0px 0px 0px var(--bright-user-color);
   }
   100% {
-    color: var(--user-color);
     text-shadow:
       0px 0px 10px var(--user-color),
       0px 0px 15px var(--user-color),
@@ -95,7 +154,6 @@
 
 @keyframes glowFadeOut {
   0% {
-    color: var(--user-color);
     text-shadow:
       0px 0px 10px var(--user-color),
       0px 0px 15px var(--user-color),
@@ -103,7 +161,6 @@
       0px 0px 25px var(--bright-user-color);
   }
   100% {
-    color: white;
     text-shadow:
       0px 0px 0px var(--user-color),
       0px 0px 0px var(--user-color),
@@ -166,9 +223,28 @@
   @apply focus:ring-0 focus:ring-offset-0;
 }
 
+/* sonner's unlayered css outranks @layer utilities; toast look lives here */
+[data-sonner-toast] {
+  background: var(--color-card);
+  color: var(--color-foreground);
+  border-color: var(--color-border);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.5);
+  padding-left: 1rem;
+}
+[data-sonner-toast][data-type='success'] {
+  color: var(--color-primary);
+}
+[data-sonner-toast] [data-description] {
+  color: white;
+  opacity: 0.35;
+}
 [data-sonner-toast] [data-button].toast-btn {
-  background-color: hsl(var(--background)) !important;
-  color: hsl(var(--foreground)) !important;
+  background-color: var(--color-background) !important;
+  color: var(--color-foreground) !important;
   padding: 0.75rem 1rem !important;
 }
 
+.cursor-none-all,
+.cursor-none-all * {
+  cursor: none !important;
+}

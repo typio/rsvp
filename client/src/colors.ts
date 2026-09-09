@@ -1,12 +1,6 @@
 export const Colors = {
-  bgColor: 'hsl(212, 100%, 0%)',
-  userColor: 'hsl(212, 100%, 36%)',
-  othersColors: [
-    'hsl(0, 100%, 65%)',
-    'hsl(110, 100%, 65%)',
-    'hsl(185, 100%, 65%)',
-    'hsl(245, 100%, 65%)',
-    'hsl(300, 100%, 65%)'
-  ],
-  allColor: 'hsl(51, 100%, 50%)'
+  bgColor: '#001329',
+  userColor: '#3492FF',
+  othersColors: ['#FF256C', '#4BE0FF', '#FF8A3F', '#EF4DFB', '#00A75F'],
+  allColor: '#FFD900'
 }

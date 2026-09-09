@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n                    INSERT IGNORE INTO users_of_rooms (user_uid, room_uid, name, is_owner, is_absent, absent_reason)\n                    VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE is_absent=?, absent_reason=?;\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "d3d19fe793505fd7a6219cca4c7bba9c8eedc3806cfcaad76781c6aea369523c"
+}

@@ -1,21 +1,18 @@
 import {
-  ColorCalculationContextType,
-  useColorCalculation
-} from '@/hooks/useColorCalculation'
-import {
   ScheduleSelectionContextType,
   useScheduleSelection
 } from '@/hooks/useScheduleSelection'
 import { ScheduleData } from '@/types'
+import type { Selection } from '@/components/Schedule'
 import { createContext, useContext } from 'react'
 
 type ScheduleContextType = {
-  isCreate: boolean
+  isDraftRoom: boolean
   data: ScheduleData
   editSchedule: (newData: ScheduleData) => void
   hoveringUser: number | null
-} & ScheduleSelectionContextType &
-  ColorCalculationContextType
+  setHoveredSlotUsers: (users: boolean[] | null) => void
+} & ScheduleSelectionContextType
 
 const ScheduleContext = createContext<ScheduleContextType | null>(null)
 
@@ -29,41 +26,36 @@ export const useScheduleContext = (): ScheduleContextType => {
 
 export const ScheduleProvider = ({
   children,
-  isCreate,
+  isDraftRoom,
   initialData,
   editSchedule,
   hoveringUser,
   setHoveredSlotUsers,
-  slotsPerColumn
+  onDragChange
 }: {
   children: React.JSX.Element
-  isCreate: boolean
+  isDraftRoom: boolean
   initialData: ScheduleData
   editSchedule: (newData: ScheduleData) => void
   hoveringUser: number | null
   setHoveredSlotUsers: (arg0: any) => void
-  slotsPerColumn: number
+  onDragChange?: (drag: Selection | null) => void
 }) => {
   const selectionProps = useScheduleSelection(
     initialData,
     editSchedule,
     setHoveredSlotUsers,
-    isCreate,
-    slotsPerColumn
-  )
-  const colorProps = useColorCalculation(
-    selectionProps.currentSelection,
-    hoveringUser,
-    initialData?.others
+    isDraftRoom,
+    onDragChange
   )
 
   return (
     <ScheduleContext.Provider
       value={{
         ...selectionProps,
-        ...colorProps,
-        isCreate,
+        isDraftRoom,
         hoveringUser,
+        setHoveredSlotUsers,
         data: initialData,
         editSchedule
       }}

@@ -13,17 +13,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       theme="dark"
-      className="bg-card"
       toastOptions={{
-        classNames: {
-          toast:
-            'toast bg-card text-foreground border border-white/10 shadow-2xl shadow-black/50 pl-4',
-          description: 'text-white opacity-35',
-          actionButton: 'toast-btn',
-          cancelButton: 'toast-btn',
-          success: 'text-primary',
-          error: ''
-        }
+        classNames: { actionButton: 'toast-btn', cancelButton: 'toast-btn' }
       }}
       icons={{
         error: (

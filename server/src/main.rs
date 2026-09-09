@@ -22,7 +22,6 @@ async fn main() -> tide::Result<()> {
 
     let pool = MySqlPool::connect(&env::var("DATABASE_URL")?).await?;
 
-    // Periodic cleanup of expired rooms
     let cleanup_pool = pool.clone();
     async_std::task::spawn(async move {
         loop {
